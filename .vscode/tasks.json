@@ -1,0 +1,29 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "GitHub: Open Login (Simple Browser)",
+      "command": "${input:githubLoginBrowser}",
+      "problemMatcher": []
+    },
+    {
+      "label": "GitHub: Open Repo (Simple Browser)",
+      "command": "${input:githubRepoBrowser}",
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "githubLoginBrowser",
+      "type": "command",
+      "command": "simpleBrowser.show",
+      "args": ["https://github.com/login"]
+    },
+    {
+      "id": "githubRepoBrowser",
+      "type": "command",
+      "command": "simpleBrowser.show",
+      "args": ["https://github.com/Lllewellla/subscription-tracker"]
+    }
+  ]
+}

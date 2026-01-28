@@ -4,7 +4,8 @@ Thumbs.db
 Desktop.ini
 
 # Editor
-.vscode/
+.vscode/*
+!.vscode/tasks.json
 .idea/
 *.swp
 *.swo
