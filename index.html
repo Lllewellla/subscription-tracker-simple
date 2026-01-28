@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Трекер подписок</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css" id="main-stylesheet">
+    <link rel="stylesheet" href="pixel-art.css" id="pixel-art-stylesheet" disabled>
+</head>
+<body>
+    <div class="app">
+        <div class="theme-switcher">
+            <button class="theme-btn active" id="theme-nature" data-theme="nature">🌿 Природа</button>
+            <button class="theme-btn" id="theme-pixel" data-theme="pixel">🎮 Pixel Art</button>
+        </div>
+
+        <div id="statistics" class="statistics"></div>
+
+        <div class="controls">
+            <div class="filter-buttons">
+                <button class="filter-btn active" data-filter="all">Все</button>
+                <button class="filter-btn" data-filter="mine">Мои подписки</button>
+                <button class="filter-btn" data-filter="others">Для других</button>
+            </div>
+            <div class="action-buttons">
+                <div class="view-mode-buttons">
+                    <button class="view-mode-btn active" id="view-grid" title="Сетка">
+                        <span>⊞</span>
+                    </button>
+                    <button class="view-mode-btn" id="view-list" title="Список">
+                        <span>☰</span>
+                    </button>
+                </div>
+                <div class="action-buttons-right">
+                    <button class="btn-add" id="btn-add">+ Добавить подписку</button>
+                    <button class="btn-add" id="btn-import">+ Импорт из выписки</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="subscriptions-container" class="subscriptions-grid"></div>
+    </div>
+
+    <!-- Модальное окно формы -->
+    <div id="form-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="form-title">Добавить подписку</h2>
+                <button class="modal-close" id="form-close-btn">✕</button>
+            </div>
+            <form id="subscription-form">
+                <div class="form-group">
+                    <label for="name">Название подписки *</label>
+                    <input type="text" id="name" required placeholder="Например: Netflix">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="price">Стоимость *</label>
+                        <input type="number" id="price" step="0.01" min="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="currency">Валюта</label>
+                        <select id="currency">
+                            <option value="₽">₽ (Рубли)</option>
+                            <option value="$">$ (Доллары)</option>
+                            <option value="€">€ (Евро)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="nextBillingDate">Дата следующего списания *</label>
+                    <input type="date" id="nextBillingDate" required>
+                </div>
+                <div class="form-group">
+                    <label for="billingCycle">Период оплаты *</label>
+                    <select id="billingCycle">
+                        <option value="monthly">Ежемесячно</option>
+                        <option value="yearly">Ежегодно</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="group">Группа *</label>
+                    <select id="group">
+                        <option value="mine">Мои подписки</option>
+                        <option value="others">Для других</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="excludeFromStats">
+                        <span>Не учитывать в статистике</span>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label for="notes">Заметки</label>
+                    <textarea id="notes" rows="3" placeholder="Дополнительная информация..."></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Сохранить</button>
+                    <button type="button" class="btn btn-secondary" id="form-cancel-btn">Отмена</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Модальное окно импорта -->
+    <div id="import-modal" class="modal" style="display: none;">
+        <div class="modal-content import-modal-content">
+            <div class="modal-header">
+                <h2>Импорт из выписки</h2>
+                <button class="modal-close" id="import-close-btn">✕</button>
+            </div>
+            <p class="import-hint">
+                Вы можете загрузить скриншоты со списаниями (OCR) или вставить текстовый список операций. 
+                Приложение попробует найти повторяющиеся платежи — подписки.
+            </p>
+            <div class="import-row">
+                <label class="import-file">
+                    <input type="file" id="file-input" accept="image/*" multiple>
+                    Выбрать изображения…
+                </label>
+                <button class="import-run" id="btn-ocr" disabled>Распознать и найти подписки</button>
+            </div>
+            <div class="import-text">
+                <div class="import-text-head">
+                    <div class="import-text-title">Или вставьте текст списаний</div>
+                    <button class="import-run" id="btn-parse-text" disabled>Найти подписки из текста</button>
+                </div>
+                <textarea id="text-input" placeholder="Пример формата (подойдет и любой похожий):&#10;12.01.2026 Netflix 399,00 ₽&#10;13.01.2026 Spotify 199 ₽&#10;..."></textarea>
+            </div>
+            <div class="import-row">
+                <label class="import-label">
+                    Группа для новых подписок
+                    <select id="import-group">
+                        <option value="mine">Мои подписки</option>
+                        <option value="others">Для других</option>
+                    </select>
+                </label>
+                <div class="import-progress" id="import-progress"></div>
+            </div>
+            <div id="import-files-list" class="import-files"></div>
+            <div id="import-results"></div>
+            <details id="import-raw" class="import-raw" style="display: none;">
+                <summary>Показать распознанный текст (для проверки)</summary>
+                <pre id="import-raw-text"></pre>
+            </details>
+        </div>
+    </div>
+
+    <!-- Подключаем Tesseract.js через CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+    <script>
+        // Проверка загрузки
+        window.addEventListener('error', function(e) {
+            console.error('Ошибка:', e.message, e.filename, e.lineno);
+        });
+    </script>
+    <script src="app.js"></script>
+</body>
+</html>

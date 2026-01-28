@@ -1,0 +1,7 @@
+ВАЖНО! Откройте именно этот файл:
+
+C:\Users\izhda\subscription-tracker-simple\index.html
+
+НЕ открывайте файл из папки subscription-tracker (старая версия с Vite)
+
+Этот файл работает напрямую в браузере без установки!
