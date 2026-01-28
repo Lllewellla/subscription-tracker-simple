@@ -101,7 +101,16 @@ function parseAmount(s) {
         const value = Number(num);
         if (Number.isFinite(value)) return Math.abs(value);
     }
-    // Стандартный парсинг
+    
+    // Поддержка формата "число валюта" (например: "17.26 €" или "8,78 €")
+    m = s.match(/(\d[\d ]*(?:[.,]\d{1,2})?)\s*[₽$€]/);
+    if (m) {
+        const num = m[1].replace(/ /g, '').replace(',', '.');
+        const value = Number(num);
+        if (Number.isFinite(value)) return Math.abs(value);
+    }
+    
+    // Стандартный парсинг - ищем любое число с десятичной частью или без
     const cleaned = s.replace(/\u00A0/g, ' ').replace(/[^\d,.\- ]/g, ' ').trim();
     m = cleaned.match(/-?\d[\d ]*(?:[.,]\d{1,2})?/);
     if (!m) return null;
@@ -127,31 +136,75 @@ function titleize(s) {
 }
 
 function parseStatementText(text) {
-    // Объединяем многострочные записи в одну строку
-    const normalized = text.replace(/\n\s*\n/g, '\n').replace(/\n/g, ' ');
-    const lines = normalized.split(/Плати по миру/i).map(l => l.trim()).filter(l => l.length > 10);
     const fallbackYear = new Date().getFullYear();
     const tx = [];
-    for (const rawLine of lines) {
-        const dateIso = parseDateToIso(rawLine, fallbackYear);
-        const amount = parseAmount(rawLine);
-        if (!dateIso || amount == null) continue;
-        // Извлекаем название компании
-        let desc = rawLine;
-        // Убираем дату
-        desc = desc.replace(/\[.*?\]/g, ' ');
-        desc = desc.replace(/\b(\d{1,2})[./-](\d{1,2})(?:[./-](\d{2,4}))?\b/g, ' ');
-        // Убираем сумму и валюту
-        desc = desc.replace(/Покупка:\s*\d+[.,]\d+\s*€/gi, ' ');
-        desc = desc.replace(/-?\d[\d ]*(?:[.,]\d{1,2})?\s*€/g, ' ');
-        desc = desc.replace(/Карта:\s*\*\d+/gi, ' ');
-        desc = desc.replace(/Остаток:.*/gi, ' ');
-        desc = desc.replace(/[₽$€]/g, ' ');
-        desc = desc.replace(/\b(RUB|USD|EUR|руб|Плати по миру)\b/gi, ' ');
-        desc = desc.replace(/\s+/g, ' ').trim();
-        if (desc.length < 2) continue;
-        tx.push({ date: dateIso, description: desc, amount, currency: detectCurrency(rawLine), raw: rawLine });
+    
+    // Проверяем, есть ли формат "Плати по миру" (старый формат)
+    if (/Плати по миру/i.test(text)) {
+        // Старый формат: объединяем многострочные записи и разделяем по "Плати по миру"
+        const normalized = text.replace(/\n\s*\n/g, '\n').replace(/\n/g, ' ');
+        const lines = normalized.split(/Плати по миру/i).map(l => l.trim()).filter(l => l.length > 10);
+        for (const rawLine of lines) {
+            const dateIso = parseDateToIso(rawLine, fallbackYear);
+            const amount = parseAmount(rawLine);
+            if (!dateIso || amount == null) continue;
+            // Извлекаем название компании
+            let desc = rawLine;
+            // Убираем дату
+            desc = desc.replace(/\[.*?\]/g, ' ');
+            desc = desc.replace(/\b(\d{1,2})[./-](\d{1,2})(?:[./-](\d{2,4}))?\b/g, ' ');
+            // Убираем сумму и валюту
+            desc = desc.replace(/Покупка:\s*\d+[.,]\d+\s*€/gi, ' ');
+            desc = desc.replace(/-?\d[\d ]*(?:[.,]\d{1,2})?\s*€/g, ' ');
+            desc = desc.replace(/Карта:\s*\*\d+/gi, ' ');
+            desc = desc.replace(/Остаток:.*/gi, ' ');
+            desc = desc.replace(/[₽$€]/g, ' ');
+            desc = desc.replace(/\b(RUB|USD|EUR|руб|Плати по миру)\b/gi, ' ');
+            desc = desc.replace(/\s+/g, ' ').trim();
+            if (desc.length < 2) continue;
+            tx.push({ date: dateIso, description: desc, amount, currency: detectCurrency(rawLine), raw: rawLine });
+        }
+    } else {
+        // Новый формат: каждая строка - отдельная транзакция
+        // Разделяем по переносам строк
+        const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 5);
+        
+        for (const rawLine of lines) {
+            const dateIso = parseDateToIso(rawLine, fallbackYear);
+            const amount = parseAmount(rawLine);
+            if (!dateIso || amount == null) continue;
+            
+            // Извлекаем название компании - более точное извлечение
+            let desc = rawLine;
+            
+            // Убираем дату в начале строки (формат DD.MM.YYYY или DD/MM/YYYY)
+            desc = desc.replace(/^\s*(\d{1,2})[./-](\d{1,2})(?:[./-](\d{2,4}))?\s+/g, ' ');
+            
+            // Убираем дату в квадратных скобках
+            desc = desc.replace(/\[.*?\]/g, ' ');
+            
+            // Убираем сумму и валюту в конце строки (формат: число валюта или число валюта)
+            desc = desc.replace(/\s+-?\d[\d ]*(?:[.,]\d{1,2})?\s*[₽$€]\s*$/g, ' ');
+            desc = desc.replace(/\s+-?\d[\d ]*(?:[.,]\d{1,2})?\s*€\s*$/g, ' ');
+            desc = desc.replace(/\s+-?\d[\d ]*(?:[.,]\d{1,2})?\s*[₽$€]/g, ' ');
+            
+            // Убираем служебные слова и валюты (но оставляем "year" для определения типа подписки)
+            desc = desc.replace(/Покупка:\s*\d+[.,]\d+\s*€/gi, ' ');
+            desc = desc.replace(/Карта:\s*\*\d+/gi, ' ');
+            desc = desc.replace(/Остаток:.*/gi, ' ');
+            desc = desc.replace(/[₽$€]/g, ' ');
+            desc = desc.replace(/\b(RUB|USD|EUR|руб|Плати по миру|мес|месяц|год)\b/gi, ' ');
+            
+            // Убираем лишние пробелы и обрезаем
+            desc = desc.replace(/\s+/g, ' ').trim();
+            
+            // Если описание слишком короткое или пустое, пропускаем
+            if (desc.length < 2) continue;
+            
+            tx.push({ date: dateIso, description: desc, amount, currency: detectCurrency(rawLine), raw: rawLine });
+        }
     }
+    
     tx.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     return tx;
 }
@@ -220,10 +273,31 @@ function buildSubscriptionCandidates(transactions) {
     }
     const candidates = [];
     for (const [key, arr] of groups.entries()) {
-        if (arr.length < 2) continue;
         const sorted = [...arr].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
         const last = sorted[sorted.length - 1];
-        const { cycle, confidence } = inferCycle(sorted.map(t => t.date));
+        
+        let cycle, confidence;
+        if (arr.length >= 2) {
+            // Если есть несколько транзакций, определяем цикл по датам
+            const inferred = inferCycle(sorted.map(t => t.date));
+            cycle = inferred.cycle;
+            confidence = inferred.confidence;
+        } else {
+            // Если только одна транзакция, пытаемся определить цикл по ключевым словам
+            const descLower = last.description.toLowerCase();
+            const rawLower = last.raw.toLowerCase();
+            
+            // Проверяем наличие слова "year" или "год" в описании или исходной строке
+            if (/year|год|yearly|annual/i.test(descLower) || /year|год|yearly|annual/i.test(rawLower)) {
+                cycle = 'yearly';
+                confidence = 'low';
+            } else {
+                // По умолчанию считаем месячной подпиской
+                cycle = 'monthly';
+                confidence = 'low';
+            }
+        }
+        
         candidates.push({
             key, name: titleize(sorted[0].description), currency: last.currency,
             lastAmount: last.amount, lastPaymentDate: last.date,
