@@ -26,11 +26,23 @@ async function initSync() {
         if (user) {
             currentUserId = user.uid;
             syncEnabled = true;
-            updateSyncStatus('synced', `Синхронизировано (${user.isAnonymous ? 'Анонимно' : user.email || 'Пользователь'})`);
+            updateSyncStatus('syncing', 'Подключение...');
             document.getElementById('btn-sync-login').style.display = 'none';
             document.getElementById('btn-sync-logout').style.display = 'inline-block';
-            await setupSyncListener();
-            await syncToCloud();
+            
+            try {
+                // Сначала настраиваем слушатель
+                await setupSyncListener();
+                
+                // Затем синхронизируем данные
+                await syncToCloud();
+                
+                // Обновляем статус после успешной синхронизации
+                updateSyncStatus('synced', `Синхронизировано (${user.isAnonymous ? 'Анонимно' : user.email || 'Пользователь'})`);
+            } catch (error) {
+                console.error('Ошибка при настройке синхронизации:', error);
+                updateSyncStatus('error', 'Ошибка подключения');
+            }
         } else {
             currentUserId = null;
             syncEnabled = false;
@@ -134,37 +146,86 @@ async function setupSyncListener() {
 
 // Синхронизация данных в облако
 async function syncToCloud() {
-    if (!syncEnabled || !currentUserId) return;
+    if (!syncEnabled || !currentUserId) {
+        console.log('Синхронизация отключена или пользователь не авторизован');
+        return;
+    }
 
     try {
+        updateSyncStatus('syncing', 'Синхронизация...');
+        
         const { doc, setDoc, serverTimestamp } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
         const userDocRef = doc(window.firebaseDb, 'users', currentUserId);
         
-        const loadSubs = window.loadSubscriptions || (() => {
-            const stored = localStorage.getItem('subscriptions');
-            if (!stored) return [];
-            try {
-                return JSON.parse(stored);
-            } catch {
-                return [];
+        // Загружаем подписки (асинхронно, если доступна функция, иначе синхронно из localStorage)
+        let subscriptions;
+        if (window.loadSubscriptions && typeof window.loadSubscriptions === 'function') {
+            // Проверяем, асинхронная ли это функция
+            const result = window.loadSubscriptions();
+            if (result instanceof Promise) {
+                subscriptions = await result;
+            } else {
+                subscriptions = result;
             }
-        });
-        const subscriptions = loadSubs();
+        } else {
+            // Fallback: загружаем напрямую из localStorage
+            const stored = localStorage.getItem('subscriptions');
+            if (!stored) {
+                subscriptions = [];
+            } else {
+                try {
+                    subscriptions = JSON.parse(stored);
+                } catch (e) {
+                    console.error('Ошибка парсинга локальных данных:', e);
+                    subscriptions = [];
+                }
+            }
+        }
+        
+        // Проверяем, что subscriptions - это массив
+        if (!Array.isArray(subscriptions)) {
+            console.warn('Подписки не являются массивом, преобразуем:', subscriptions);
+            subscriptions = [];
+        }
+        
+        console.log('Синхронизация подписок в облако:', subscriptions.length, 'подписок');
         
         await setDoc(userDocRef, {
             subscriptions: subscriptions,
             lastUpdated: serverTimestamp()
         }, { merge: true });
         
-        updateSyncStatus('syncing', 'Синхронизация...');
-        setTimeout(() => {
-            if (syncEnabled) {
-                updateSyncStatus('synced', 'Синхронизировано');
-            }
-        }, 500);
+        console.log('Данные успешно сохранены в облако');
+        updateSyncStatus('synced', 'Синхронизировано');
+        
     } catch (error) {
         console.error('Ошибка сохранения в облако:', error);
-        updateSyncStatus('error', 'Ошибка сохранения');
+        console.error('Детали ошибки:', {
+            code: error.code,
+            message: error.message,
+            stack: error.stack
+        });
+        
+        // Более детальное сообщение об ошибке
+        let errorMessage = 'Ошибка сохранения';
+        if (error.code === 'permission-denied') {
+            errorMessage = 'Ошибка: Нет доступа. Проверьте правила Firestore.';
+        } else if (error.code === 'unavailable') {
+            errorMessage = 'Ошибка: Сервис недоступен. Проверьте интернет.';
+        } else if (error.message) {
+            errorMessage = 'Ошибка: ' + error.message;
+        }
+        
+        updateSyncStatus('error', errorMessage);
+        
+        // Показываем alert только для критических ошибок
+        if (error.code === 'permission-denied') {
+            alert('Ошибка доступа к Firebase!\n\n' +
+                  'Возможные причины:\n' +
+                  '1. Правила Firestore не настроены правильно\n' +
+                  '2. Анонимная аутентификация не включена\n\n' +
+                  'Проверьте консоль браузера (F12) для подробностей.');
+        }
     }
 }
 
