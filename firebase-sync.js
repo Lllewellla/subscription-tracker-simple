@@ -31,15 +31,49 @@ async function initSync() {
             document.getElementById('btn-sync-logout').style.display = 'inline-block';
             
             try {
-                // Сначала настраиваем слушатель
+                // Сначала настраиваем слушатель (только для получения обновлений)
                 await setupSyncListener();
                 
-                // Затем синхронизируем данные
-                await syncToCloud();
+                // Загружаем данные из облака при входе (если есть)
+                const cloudData = await loadFromCloud();
+                const localTimestamp = getLocalTimestamp();
+                const cloudTimestamp = await getCloudTimestamp();
                 
-                // Обновляем статус после успешной синхронизации
-                const userEmail = user.email || (user.isAnonymous ? 'Анонимно' : 'Пользователь');
-                updateSyncStatus('synced', `Синхронизировано (${userEmail})`);
+                if (cloudData && cloudData.length > 0) {
+                    // Есть данные в облаке - сравниваем с локальными
+                    if (cloudTimestamp > localTimestamp || localTimestamp === 0) {
+                        // Облачные данные новее или локальных нет - загружаем из облака
+                        if (window.saveSubscriptions) {
+                            window.saveSubscriptions(cloudData);
+                        }
+                        if (window.subscriptions) {
+                            window.subscriptions = cloudData;
+                            if (window.render) {
+                                window.render();
+                            }
+                        }
+                        updateSyncStatus('synced', `Загружено из облака (${user.email || 'Пользователь'})`);
+                    } else if (localTimestamp > cloudTimestamp) {
+                        // Локальные данные новее - показываем кнопку сохранения
+                        updateSyncStatus('local-newer', `Локальные данные новее (${user.email || 'Пользователь'})`);
+                    } else {
+                        // Данные синхронизированы
+                        updateSyncStatus('synced', `Синхронизировано (${user.email || 'Пользователь'})`);
+                    }
+                } else {
+                    // Нет данных в облаке - показываем статус готовности к сохранению
+                    if (localTimestamp > 0) {
+                        updateSyncStatus('ready', `Готово к сохранению (${user.email || 'Пользователь'})`);
+                    } else {
+                        updateSyncStatus('ready', `Войдите для синхронизации (${user.email || 'Пользователь'})`);
+                    }
+                }
+                
+                // Показываем кнопку сохранения
+                const saveBtn = document.getElementById('btn-sync-save');
+                if (saveBtn) {
+                    saveBtn.style.display = 'inline-block';
+                }
             } catch (error) {
                 console.error('Ошибка при настройке синхронизации:', error);
                 updateSyncStatus('error', 'Ошибка подключения');
@@ -50,6 +84,10 @@ async function initSync() {
             updateSyncStatus('local', 'Локально');
             document.getElementById('btn-sync-login').style.display = 'inline-block';
             document.getElementById('btn-sync-logout').style.display = 'none';
+            const saveBtn = document.getElementById('btn-sync-save');
+            if (saveBtn) {
+                saveBtn.style.display = 'none';
+            }
             if (unsubscribeListener) {
                 unsubscribeListener();
                 unsubscribeListener = null;
@@ -343,6 +381,78 @@ async function loadFromCloud() {
     return null;
 }
 
+// Получение временной метки из облака
+async function getCloudTimestamp() {
+    if (!syncEnabled || !currentUserId) return 0;
+
+    try {
+        const { doc, getDoc } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+        const userDocRef = doc(window.firebaseDb, 'users', currentUserId);
+        const snapshot = await getDoc(userDocRef);
+        
+        if (snapshot.exists()) {
+            const data = snapshot.data();
+            if (data.lastUpdated) {
+                // Firestore Timestamp
+                if (data.lastUpdated.toMillis) {
+                    return data.lastUpdated.toMillis();
+                }
+                // Обычное число
+                return data.lastUpdated || 0;
+            }
+        }
+    } catch (error) {
+        console.error('Ошибка получения временной метки:', error);
+    }
+    return 0;
+}
+
+// Явное сохранение в облако (по нажатию кнопки)
+async function saveToCloudExplicit() {
+    if (!syncEnabled || !currentUserId) {
+        alert('Вы не вошли в систему. Пожалуйста, войдите для синхронизации.');
+        return;
+    }
+
+    // Проверяем, есть ли более новые данные в облаке
+    const cloudTimestamp = await getCloudTimestamp();
+    const localTimestamp = getLocalTimestamp();
+    
+    if (cloudTimestamp > localTimestamp) {
+        const confirmSave = confirm(
+            'В облаке есть более новые данные!\n\n' +
+            'Локальные данные: ' + new Date(localTimestamp).toLocaleString('ru-RU') + '\n' +
+            'Облачные данные: ' + new Date(cloudTimestamp).toLocaleString('ru-RU') + '\n\n' +
+            'Вы уверены, что хотите перезаписать облачные данные локальными?'
+        );
+        
+        if (!confirmSave) {
+            updateSyncStatus('ready', 'Сохранение отменено');
+            return;
+        }
+    }
+
+    // Сохраняем в облако
+    updateSyncStatus('syncing', 'Сохранение в облако...');
+    
+    try {
+        await syncToCloud();
+        updateSyncStatus('synced', 'Сохранено в облако');
+        
+        // Показываем уведомление об успехе
+        if (Notification.permission === 'granted') {
+            new Notification('Данные сохранены', {
+                body: 'Ваши подписки успешно сохранены в облако',
+                icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="green"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>'
+            });
+        }
+    } catch (error) {
+        console.error('Ошибка сохранения:', error);
+        updateSyncStatus('error', 'Ошибка сохранения');
+        alert('Не удалось сохранить данные в облако: ' + (error.message || 'Неизвестная ошибка'));
+    }
+}
+
 // Обновление статуса синхронизации
 function updateSyncStatus(status, text) {
     const statusEl = document.getElementById('sync-status');
@@ -359,6 +469,14 @@ function updateSyncStatus(status, text) {
         case 'syncing':
             statusEl.textContent = '🔄 ' + (text || 'Синхронизация...');
             statusEl.title = 'Идет синхронизация...';
+            break;
+        case 'ready':
+            statusEl.textContent = '💾 ' + (text || 'Готово к сохранению');
+            statusEl.title = 'Нажмите "Сохранить в облако" для синхронизации';
+            break;
+        case 'local-newer':
+            statusEl.textContent = '⚠️ ' + (text || 'Локальные данные новее');
+            statusEl.title = 'Локальные данные новее облачных. Нажмите "Сохранить в облако"';
             break;
         case 'error':
             statusEl.textContent = '❌ ' + (text || 'Ошибка');
@@ -392,12 +510,16 @@ document.addEventListener('DOMContentLoaded', () => {
         // Настраиваем обработчики кнопок
         const loginBtn = document.getElementById('btn-sync-login');
         const logoutBtn = document.getElementById('btn-sync-logout');
+        const saveBtn = document.getElementById('btn-sync-save');
         
         if (loginBtn) {
             loginBtn.addEventListener('click', openAuthModal);
         }
         if (logoutBtn) {
             logoutBtn.addEventListener('click', logoutSync);
+        }
+        if (saveBtn) {
+            saveBtn.addEventListener('click', saveToCloudExplicit);
         }
         
         // Обработчики модального окна аутентификации
@@ -439,7 +561,8 @@ document.addEventListener('DOMContentLoaded', () => {
 window.firebaseSync = {
     syncToCloud,
     loadFromCloud,
+    saveToCloudExplicit,
     isEnabled: () => syncEnabled,
-    login: loginSync,
+    login: openAuthModal,
     logout: logoutSync
 };

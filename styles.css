@@ -1137,6 +1137,18 @@ body {
     white-space: nowrap;
 }
 
+.btn-save-cloud {
+    background: rgba(76, 175, 80, 0.5);
+    border-color: rgba(76, 175, 80, 0.6);
+    font-weight: 600;
+}
+
+.btn-save-cloud:hover {
+    background: rgba(76, 175, 80, 0.7);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.4);
+}
+
 .btn-sync:hover {
     background: rgba(76, 175, 80, 0.5);
     transform: translateY(-1px);
@@ -1339,6 +1351,11 @@ body {
     .btn-sync {
         padding: 4px 8px;
         font-size: 10px;
+    }
+
+    .btn-save-cloud {
+        font-size: 9px;
+        padding: 3px 6px;
     }
 
     /* Модальные окна на мобильных */

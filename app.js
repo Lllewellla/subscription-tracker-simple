@@ -5,10 +5,8 @@ function saveSubscriptions(subscriptions) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(subscriptions));
     localStorage.setItem('subscriptions_timestamp', Date.now().toString());
     
-    // Синхронизация с облаком, если включена
-    if (window.firebaseSync && window.firebaseSync.isEnabled()) {
-        window.firebaseSync.syncToCloud();
-    }
+    // Автоматическая синхронизация отключена - используйте кнопку "Сохранить в облако"
+    // для явного сохранения данных
 }
 
 // Экспортируем для использования в firebase-sync.js
