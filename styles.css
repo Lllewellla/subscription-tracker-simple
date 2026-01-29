@@ -4,6 +4,13 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent; /* Убираем подсветку при клике на мобильных */
+}
+
+/* Улучшенная прокрутка для мобильных */
+html {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
 }
 
 body {
@@ -18,13 +25,15 @@ body {
                 radial-gradient(circle at 40% 20%, rgba(27, 94, 32, 0.25) 0%, transparent 50%);
     background-attachment: fixed;
     min-height: 100vh;
-    padding: 20px;
+    padding: 10px;
     color: #e8f5e9;
 }
 
 .app {
     max-width: 1200px;
     margin: 0 auto;
+    position: relative;
+    padding-top: 80px; /* Отступ для header-controls */
 }
 
 .app-header {
@@ -62,6 +71,8 @@ body {
     margin-bottom: 30px;
     border: 1px solid rgba(76, 175, 80, 0.2);
     backdrop-filter: blur(10px);
+    position: relative;
+    z-index: 1;
 }
 
 .statistics h2 {
@@ -149,6 +160,8 @@ body {
     margin-bottom: 30px;
     flex-wrap: wrap;
     gap: 16px;
+    position: relative;
+    z-index: 1;
 }
 
 .filter-buttons {
@@ -571,7 +584,7 @@ body {
 }
 
 .modal-content {
-    width: min(960px, 100%);
+    width: min(960px, calc(100% - 40px));
     background: rgba(13, 40, 24, 0.95);
     border-radius: 20px;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
@@ -581,6 +594,7 @@ body {
     position: relative;
     border: 1px solid rgba(76, 175, 80, 0.3);
     backdrop-filter: blur(10px);
+    margin: 20px auto;
 }
 
 .modal-header {
@@ -1062,56 +1076,65 @@ body {
 /* Переключатель стилей */
 .header-controls {
     position: fixed;
-    top: 20px;
-    right: 20px;
+    top: 10px;
+    right: 10px;
     z-index: 10000;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 8px;
     align-items: flex-end;
+    max-width: calc(100% - 20px);
 }
 
 .theme-switcher {
     display: flex;
-    gap: 8px;
+    gap: 4px;
     background: rgba(255, 255, 255, 0.1);
-    padding: 8px;
-    border-radius: 24px;
+    padding: 6px;
+    border-radius: 20px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
     border: 1px solid rgba(76, 175, 80, 0.25);
     backdrop-filter: blur(10px);
+    flex-wrap: wrap;
+    max-width: 100%;
 }
 
 .sync-controls {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     background: rgba(255, 255, 255, 0.1);
-    padding: 8px 12px;
-    border-radius: 20px;
+    padding: 6px 10px;
+    border-radius: 18px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
     border: 1px solid rgba(76, 175, 80, 0.25);
     backdrop-filter: blur(10px);
+    flex-wrap: wrap;
+    max-width: 100%;
 }
 
 .sync-status {
-    font-size: 12px;
+    font-size: 11px;
     color: #c8e6c9;
     white-space: nowrap;
     font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
 }
 
 .btn-sync {
-    padding: 6px 12px;
+    padding: 5px 10px;
     border: none;
     background: rgba(76, 175, 80, 0.3);
     color: #e8f5e9;
-    font-size: 12px;
-    border-radius: 16px;
+    font-size: 11px;
+    border-radius: 14px;
     cursor: pointer;
     transition: all 0.3s ease;
     border: 1px solid rgba(76, 175, 80, 0.4);
     font-weight: 500;
+    white-space: nowrap;
 }
 
 .btn-sync:hover {
@@ -1161,16 +1184,17 @@ body {
 }
 
 .theme-btn {
-    padding: 8px 16px;
+    padding: 6px 12px;
     border: none;
     background: transparent;
     color: #c8e6c9;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.3s ease;
-    border-radius: 16px;
+    border-radius: 14px;
     font-family: inherit;
+    white-space: nowrap;
 }
 
 .theme-btn:hover {
@@ -1183,21 +1207,91 @@ body {
 }
 
 @media (max-width: 768px) {
+    body {
+        padding: 5px;
+    }
+
+    .app {
+        padding-top: 100px; /* Больше отступ для мобильных */
+    }
+
     .app-header h1 {
-        font-size: 20px;
+        font-size: 18px;
+    }
+
+    .statistics {
+        padding: 15px;
+        margin-bottom: 20px;
+    }
+
+    .stats-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    .stat-card {
+        padding: 15px;
+    }
+
+    .stat-value {
+        font-size: 24px;
     }
 
     .controls {
         flex-direction: column;
         align-items: stretch;
+        gap: 12px;
+        margin-bottom: 20px;
     }
 
     .filter-buttons {
         justify-content: center;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .filter-btn {
+        padding: 8px 16px;
+        font-size: 13px;
+    }
+
+    .action-buttons {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .view-mode-buttons {
+        justify-content: center;
+    }
+
+    .action-buttons-right {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        width: 100%;
+    }
+
+    .btn-add {
+        width: 100%;
+        padding: 12px;
+        font-size: 14px;
     }
 
     .subscriptions-grid {
         grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    .subscription-card {
+        padding: 15px;
+    }
+
+    .card-header h3 {
+        font-size: 16px;
+    }
+
+    .price {
+        font-size: 20px;
     }
 
     .form-row {
@@ -1205,38 +1299,172 @@ body {
     }
 
     .import-modal-content {
-        padding: 20px;
+        padding: 15px;
     }
 
     .header-controls {
-        top: 10px;
-        right: 10px;
-        gap: 8px;
+        top: 5px;
+        right: 5px;
+        left: 5px;
+        align-items: flex-end;
+        gap: 6px;
+        max-width: calc(100% - 10px);
     }
 
     .theme-switcher {
-        flex-direction: column;
-        padding: 6px;
+        flex-direction: row;
+        padding: 4px;
+        gap: 2px;
+        width: auto;
     }
 
     .theme-btn {
-        padding: 6px 12px;
-        font-size: 12px;
+        padding: 5px 10px;
+        font-size: 11px;
     }
 
     .sync-controls {
-        padding: 6px 10px;
+        padding: 5px 8px;
         flex-wrap: wrap;
-        max-width: 200px;
+        width: auto;
+        max-width: 100%;
+        justify-content: flex-end;
     }
 
     .sync-status {
-        font-size: 11px;
+        font-size: 10px;
+        max-width: 150px;
     }
 
     .btn-sync {
-        padding: 5px 10px;
-        font-size: 11px;
+        padding: 4px 8px;
+        font-size: 10px;
+    }
+
+    /* Модальные окна на мобильных */
+    .modal-content {
+        margin: 10px;
+        max-width: calc(100% - 20px);
+        max-height: calc(100vh - 20px);
+        overflow-y: auto;
+    }
+
+    .modal-header h2 {
+        font-size: 18px;
+    }
+
+    .form-group {
+        margin-bottom: 15px;
+    }
+
+    .form-group label {
+        font-size: 13px;
+    }
+
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+        font-size: 14px;
+        padding: 10px;
+    }
+
+    .btn {
+        padding: 10px 20px;
+        font-size: 14px;
+    }
+
+    /* Улучшенная прокрутка на мобильных */
+    .modal-content {
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* Карточки подписок на мобильных */
+    .subscription-card .card-header {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .card-actions {
+        gap: 6px;
+    }
+
+    .icon-btn {
+        padding: 6px;
+        font-size: 16px;
+    }
+}
+
+@media (max-width: 480px) {
+    body {
+        padding: 5px;
+    }
+
+    .app {
+        padding-top: 120px; /* Еще больше отступ для очень маленьких экранов */
+    }
+
+    .statistics {
+        padding: 12px;
+    }
+
+    .stat-value {
+        font-size: 20px;
+    }
+
+    .header-controls {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 4px;
+        top: 5px;
+        left: 5px;
+        right: 5px;
+    }
+
+    .theme-switcher {
+        order: 1;
+        flex-shrink: 0;
+    }
+
+    .sync-controls {
+        order: 2;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 4px;
+        flex-shrink: 1;
+        min-width: 0;
+    }
+
+    .sync-status {
+        font-size: 9px;
+        max-width: 100px;
+    }
+
+    .btn-sync {
+        font-size: 9px;
+        padding: 3px 6px;
+    }
+
+    .theme-btn {
+        padding: 4px 8px;
+        font-size: 10px;
+    }
+
+    .modal-content {
+        margin: 10px 5px;
+        padding: 20px 15px;
+        max-width: calc(100% - 10px);
+    }
+
+    .form-group {
+        margin-bottom: 12px;
+    }
+
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+        font-size: 16px; /* Предотвращает зум на iOS */
+        padding: 12px;
     }
 }
 
