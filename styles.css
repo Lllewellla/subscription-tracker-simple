@@ -1120,6 +1120,46 @@ body {
     box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
 }
 
+/* Стили для модального окна аутентификации */
+.auth-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid rgba(76, 175, 80, 0.3);
+}
+
+.auth-tab {
+    padding: 10px 20px;
+    border: none;
+    background: transparent;
+    color: #a5d6a7;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+}
+
+.auth-tab:hover {
+    color: #c8e6c9;
+}
+
+.auth-tab.active {
+    color: #66bb6a;
+    border-bottom-color: #66bb6a;
+}
+
+.auth-error {
+    background: rgba(244, 67, 54, 0.2);
+    border: 1px solid rgba(244, 67, 54, 0.4);
+    color: #ffcdd2;
+    padding: 12px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    font-size: 14px;
+}
+
 .theme-btn {
     padding: 8px 16px;
     border: none;

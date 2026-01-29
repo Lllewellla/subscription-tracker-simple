@@ -38,7 +38,8 @@ async function initSync() {
                 await syncToCloud();
                 
                 // Обновляем статус после успешной синхронизации
-                updateSyncStatus('synced', `Синхронизировано (${user.isAnonymous ? 'Анонимно' : user.email || 'Пользователь'})`);
+                const userEmail = user.email || (user.isAnonymous ? 'Анонимно' : 'Пользователь');
+                updateSyncStatus('synced', `Синхронизировано (${userEmail})`);
             } catch (error) {
                 console.error('Ошибка при настройке синхронизации:', error);
                 updateSyncStatus('error', 'Ошибка подключения');
@@ -57,19 +58,113 @@ async function initSync() {
     });
 }
 
-// Вход (анонимный)
-async function loginSync() {
+// Открытие модального окна входа
+function openAuthModal() {
     if (!isFirebaseAvailable()) {
         alert('Firebase не настроен. Пожалуйста, настройте Firebase конфигурацию в index.html');
         return;
     }
+    document.getElementById('auth-modal').style.display = 'flex';
+    switchAuthTab('login');
+}
 
+// Закрытие модального окна входа
+function closeAuthModal() {
+    document.getElementById('auth-modal').style.display = 'none';
+    document.getElementById('auth-error').style.display = 'none';
+    document.getElementById('auth-form').reset();
+}
+
+// Переключение между вкладками входа/регистрации
+function switchAuthTab(tab) {
+    const loginTab = document.querySelector('[data-tab="login"]');
+    const registerTab = document.querySelector('[data-tab="register"]');
+    const title = document.getElementById('auth-title');
+    const submitBtn = document.getElementById('auth-submit-btn');
+    
+    if (tab === 'login') {
+        loginTab.classList.add('active');
+        registerTab.classList.remove('active');
+        title.textContent = 'Вход для синхронизации';
+        submitBtn.textContent = 'Войти';
+    } else {
+        loginTab.classList.remove('active');
+        registerTab.classList.add('active');
+        title.textContent = 'Регистрация для синхронизации';
+        submitBtn.textContent = 'Зарегистрироваться';
+    }
+}
+
+// Вход по email/password
+async function loginWithEmail(email, password) {
     try {
-        const { signInAnonymously } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
-        await signInAnonymously(window.firebaseAuth);
+        const { signInWithEmailAndPassword } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
+        await signInWithEmailAndPassword(window.firebaseAuth, email, password);
+        closeAuthModal();
+        return true;
     } catch (error) {
         console.error('Ошибка входа:', error);
-        alert('Не удалось войти: ' + error.message);
+        showAuthError(getAuthErrorMessage(error));
+        return false;
+    }
+}
+
+// Регистрация по email/password
+async function registerWithEmail(email, password) {
+    try {
+        const { createUserWithEmailAndPassword } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
+        await createUserWithEmailAndPassword(window.firebaseAuth, email, password);
+        closeAuthModal();
+        return true;
+    } catch (error) {
+        console.error('Ошибка регистрации:', error);
+        showAuthError(getAuthErrorMessage(error));
+        return false;
+    }
+}
+
+// Получение понятного сообщения об ошибке
+function getAuthErrorMessage(error) {
+    const errorMessages = {
+        'auth/user-not-found': 'Пользователь с таким email не найден',
+        'auth/wrong-password': 'Неверный пароль',
+        'auth/email-already-in-use': 'Email уже используется',
+        'auth/weak-password': 'Пароль слишком слабый (минимум 6 символов)',
+        'auth/invalid-email': 'Неверный формат email',
+        'auth/network-request-failed': 'Ошибка сети. Проверьте интернет-соединение',
+        'auth/too-many-requests': 'Слишком много попыток. Попробуйте позже'
+    };
+    return errorMessages[error.code] || error.message || 'Произошла ошибка';
+}
+
+// Показать ошибку аутентификации
+function showAuthError(message) {
+    const errorEl = document.getElementById('auth-error');
+    errorEl.textContent = message;
+    errorEl.style.display = 'block';
+}
+
+// Обработка формы входа/регистрации
+async function handleAuthForm(e) {
+    e.preventDefault();
+    const email = document.getElementById('auth-email').value.trim();
+    const password = document.getElementById('auth-password').value;
+    const activeTab = document.querySelector('.auth-tab.active').dataset.tab;
+    
+    if (!email || !password) {
+        showAuthError('Заполните все поля');
+        return;
+    }
+    
+    if (password.length < 6) {
+        showAuthError('Пароль должен содержать минимум 6 символов');
+        return;
+    }
+    
+    if (activeTab === 'login') {
+        await loginWithEmail(email, password);
+    } else {
+        await registerWithEmail(email, password);
     }
 }
 
@@ -299,10 +394,43 @@ document.addEventListener('DOMContentLoaded', () => {
         const logoutBtn = document.getElementById('btn-sync-logout');
         
         if (loginBtn) {
-            loginBtn.addEventListener('click', loginSync);
+            loginBtn.addEventListener('click', openAuthModal);
         }
         if (logoutBtn) {
             logoutBtn.addEventListener('click', logoutSync);
+        }
+        
+        // Обработчики модального окна аутентификации
+        const authModal = document.getElementById('auth-modal');
+        const authForm = document.getElementById('auth-form');
+        const authCloseBtn = document.getElementById('auth-close-btn');
+        const authCancelBtn = document.getElementById('auth-cancel-btn');
+        const authTabs = document.querySelectorAll('.auth-tab');
+        
+        if (authForm) {
+            authForm.addEventListener('submit', handleAuthForm);
+        }
+        if (authCloseBtn) {
+            authCloseBtn.addEventListener('click', closeAuthModal);
+        }
+        if (authCancelBtn) {
+            authCancelBtn.addEventListener('click', closeAuthModal);
+        }
+        if (authTabs.length > 0) {
+            authTabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    switchAuthTab(tab.dataset.tab);
+                });
+            });
+        }
+        
+        // Закрытие модального окна по клику вне области
+        if (authModal) {
+            authModal.addEventListener('click', (e) => {
+                if (e.target.id === 'auth-modal') {
+                    closeAuthModal();
+                }
+            });
         }
     }, 1000);
 });
