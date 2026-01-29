@@ -69,10 +69,14 @@ async function initSync() {
                     }
                 }
                 
-                // Показываем кнопку сохранения
+                // Показываем кнопки сохранения и загрузки
                 const saveBtn = document.getElementById('btn-sync-save');
+                const loadBtn = document.getElementById('btn-sync-load');
                 if (saveBtn) {
                     saveBtn.style.display = 'inline-block';
+                }
+                if (loadBtn) {
+                    loadBtn.style.display = 'inline-block';
                 }
             } catch (error) {
                 console.error('Ошибка при настройке синхронизации:', error);
@@ -85,8 +89,12 @@ async function initSync() {
             document.getElementById('btn-sync-login').style.display = 'inline-block';
             document.getElementById('btn-sync-logout').style.display = 'none';
             const saveBtn = document.getElementById('btn-sync-save');
+            const loadBtn = document.getElementById('btn-sync-load');
             if (saveBtn) {
                 saveBtn.style.display = 'none';
+            }
+            if (loadBtn) {
+                loadBtn.style.display = 'none';
             }
             if (unsubscribeListener) {
                 unsubscribeListener();
@@ -453,6 +461,69 @@ async function saveToCloudExplicit() {
     }
 }
 
+// Явная загрузка из облака (по нажатию кнопки)
+async function loadFromCloudExplicit() {
+    if (!syncEnabled || !currentUserId) {
+        alert('Вы не вошли в систему. Пожалуйста, войдите для синхронизации.');
+        return;
+    }
+
+    const localTimestamp = getLocalTimestamp();
+    const cloudTimestamp = await getCloudTimestamp();
+    
+    // Проверяем, есть ли более новые локальные данные
+    if (localTimestamp > cloudTimestamp && localTimestamp > 0) {
+        const confirmLoad = confirm(
+            'У вас есть локальные изменения, которые новее облачных!\n\n' +
+            'Локальные данные: ' + new Date(localTimestamp).toLocaleString('ru-RU') + '\n' +
+            'Облачные данные: ' + new Date(cloudTimestamp).toLocaleString('ru-RU') + '\n\n' +
+            'Загрузка из облака перезапишет ваши локальные данные. Продолжить?'
+        );
+        
+        if (!confirmLoad) {
+            updateSyncStatus('ready', 'Загрузка отменена');
+            return;
+        }
+    }
+
+    // Загружаем из облака
+    updateSyncStatus('syncing', 'Загрузка из облака...');
+    
+    try {
+        const cloudData = await loadFromCloud();
+        
+        if (cloudData && cloudData.length >= 0) {
+            // Сохраняем загруженные данные локально
+            if (window.saveSubscriptions) {
+                window.saveSubscriptions(cloudData);
+            }
+            if (window.subscriptions) {
+                window.subscriptions = cloudData;
+                if (window.render) {
+                    window.render();
+                }
+            }
+            
+            updateSyncStatus('synced', 'Загружено из облака');
+            
+            // Показываем уведомление об успехе
+            if (Notification.permission === 'granted') {
+                new Notification('Данные загружены', {
+                    body: `Загружено ${cloudData.length} подписок из облака`,
+                    icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="blue"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>'
+                });
+            }
+        } else {
+            updateSyncStatus('ready', 'В облаке нет данных');
+            alert('В облаке нет сохраненных данных.');
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки:', error);
+        updateSyncStatus('error', 'Ошибка загрузки');
+        alert('Не удалось загрузить данные из облака: ' + (error.message || 'Неизвестная ошибка'));
+    }
+}
+
 // Обновление статуса синхронизации
 function updateSyncStatus(status, text) {
     const statusEl = document.getElementById('sync-status');
@@ -511,6 +582,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const loginBtn = document.getElementById('btn-sync-login');
         const logoutBtn = document.getElementById('btn-sync-logout');
         const saveBtn = document.getElementById('btn-sync-save');
+        const loadBtn = document.getElementById('btn-sync-load');
         
         if (loginBtn) {
             loginBtn.addEventListener('click', openAuthModal);
@@ -520,6 +592,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (saveBtn) {
             saveBtn.addEventListener('click', saveToCloudExplicit);
+        }
+        if (loadBtn) {
+            loadBtn.addEventListener('click', loadFromCloudExplicit);
         }
         
         // Обработчики модального окна аутентификации
@@ -562,6 +637,7 @@ window.firebaseSync = {
     syncToCloud,
     loadFromCloud,
     saveToCloudExplicit,
+    loadFromCloudExplicit,
     isEnabled: () => syncEnabled,
     login: openAuthModal,
     logout: logoutSync

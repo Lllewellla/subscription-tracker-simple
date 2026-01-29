@@ -1149,6 +1149,18 @@ body {
     box-shadow: 0 2px 8px rgba(76, 175, 80, 0.4);
 }
 
+.btn-load-cloud {
+    background: rgba(33, 150, 243, 0.5);
+    border-color: rgba(33, 150, 243, 0.6);
+    font-weight: 600;
+}
+
+.btn-load-cloud:hover {
+    background: rgba(33, 150, 243, 0.7);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(33, 150, 243, 0.4);
+}
+
 .btn-sync:hover {
     background: rgba(76, 175, 80, 0.5);
     transform: translateY(-1px);
@@ -1353,7 +1365,8 @@ body {
         font-size: 10px;
     }
 
-    .btn-save-cloud {
+    .btn-save-cloud,
+    .btn-load-cloud {
         font-size: 9px;
         padding: 3px 6px;
     }
