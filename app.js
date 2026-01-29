@@ -1,9 +1,12 @@
 // Хранение данных
 const STORAGE_KEY = 'subscriptions';
 
-function saveSubscriptions(subscriptions) {
+function saveSubscriptions(subscriptions, timestamp = null) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(subscriptions));
-    localStorage.setItem('subscriptions_timestamp', Date.now().toString());
+    // Если временная метка не указана, используем текущее время (для локальных изменений)
+    // Если указана - используем её (для данных из облака)
+    const finalTimestamp = timestamp !== null ? timestamp : Date.now();
+    localStorage.setItem('subscriptions_timestamp', finalTimestamp.toString());
     
     // Автоматическая синхронизация отключена - используйте кнопку "Сохранить в облако"
     // для явного сохранения данных
@@ -13,16 +16,9 @@ function saveSubscriptions(subscriptions) {
 window.saveSubscriptions = saveSubscriptions;
 
 async function loadSubscriptions() {
-    // Сначала пытаемся загрузить из облака, если синхронизация включена
-    if (window.firebaseSync && window.firebaseSync.isEnabled()) {
-        const cloudData = await window.firebaseSync.loadFromCloud();
-        if (cloudData && cloudData.length > 0) {
-            // Сохраняем локально для офлайн доступа
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(cloudData));
-            localStorage.setItem('subscriptions_timestamp', Date.now().toString());
-            return cloudData;
-        }
-    }
+    // НЕ загружаем автоматически из облака при вызове loadSubscriptions
+    // Это должно происходить только явно через кнопку "Обновить из облака"
+    // или при входе в систему
     
     // Загружаем из localStorage
     const stored = localStorage.getItem(STORAGE_KEY);

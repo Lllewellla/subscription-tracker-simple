@@ -39,12 +39,21 @@ async function initSync() {
                 const localTimestamp = getLocalTimestamp();
                 const cloudTimestamp = await getCloudTimestamp();
                 
+                console.log('Сравнение версий при входе:', {
+                    localTimestamp: localTimestamp ? new Date(localTimestamp).toLocaleString('ru-RU') : 'нет',
+                    cloudTimestamp: cloudTimestamp ? new Date(cloudTimestamp).toLocaleString('ru-RU') : 'нет',
+                    localTimestampRaw: localTimestamp,
+                    cloudTimestampRaw: cloudTimestamp
+                });
+                
                 if (cloudData && cloudData.length > 0) {
                     // Есть данные в облаке - сравниваем с локальными
                     if (cloudTimestamp > localTimestamp || localTimestamp === 0) {
                         // Облачные данные новее или локальных нет - загружаем из облака
+                        console.log('Загружаем данные из облака (облачные новее)');
+                        // ВАЖНО: сохраняем временную метку из облака, а не текущее время!
                         if (window.saveSubscriptions) {
-                            window.saveSubscriptions(cloudData);
+                            window.saveSubscriptions(cloudData, cloudTimestamp);
                         }
                         if (window.subscriptions) {
                             window.subscriptions = cloudData;
@@ -55,9 +64,11 @@ async function initSync() {
                         updateSyncStatus('synced', `Загружено из облака (${user.email || 'Пользователь'})`);
                     } else if (localTimestamp > cloudTimestamp) {
                         // Локальные данные новее - показываем кнопку сохранения
+                        console.log('Локальные данные новее облачных');
                         updateSyncStatus('local-newer', `Локальные данные новее (${user.email || 'Пользователь'})`);
                     } else {
                         // Данные синхронизированы
+                        console.log('Данные синхронизированы');
                         updateSyncStatus('synced', `Синхронизировано (${user.email || 'Пользователь'})`);
                     }
                 } else {
@@ -265,11 +276,17 @@ async function setupSyncListener() {
             
             // Если облачные данные новее, загружаем их
             if (cloudTimestamp > localTimestamp) {
-                console.log('Загружаем данные из облака...');
-                const saveSubs = window.saveSubscriptions || ((subs) => {
+                console.log('Загружаем данные из облака (слушатель)...');
+                // ВАЖНО: сохраняем временную метку из облака, а не текущее время!
+                const saveSubs = window.saveSubscriptions || ((subs, ts) => {
                     localStorage.setItem('subscriptions', JSON.stringify(subs));
+                    if (ts !== undefined) {
+                        localStorage.setItem('subscriptions_timestamp', ts.toString());
+                    } else {
+                        localStorage.setItem('subscriptions_timestamp', Date.now().toString());
+                    }
                 });
-                saveSubs(cloudData.subscriptions);
+                saveSubs(cloudData.subscriptions, cloudTimestamp);
                 if (window.subscriptions) {
                     window.subscriptions = cloudData.subscriptions;
                     if (window.render) {
@@ -445,6 +462,18 @@ async function saveToCloudExplicit() {
     
     try {
         await syncToCloud();
+        
+        // Ждем немного, чтобы Firestore обновил временную метку
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // После сохранения обновляем локальную временную метку на время сохранения в облако
+        // Это нужно для правильного сравнения версий в будущем
+        const savedCloudTimestamp = await getCloudTimestamp();
+        if (savedCloudTimestamp > 0) {
+            localStorage.setItem('subscriptions_timestamp', savedCloudTimestamp.toString());
+            console.log('Локальная временная метка обновлена на:', new Date(savedCloudTimestamp).toLocaleString('ru-RU'));
+        }
+        
         updateSyncStatus('synced', 'Сохранено в облако');
         
         // Показываем уведомление об успехе
@@ -491,11 +520,13 @@ async function loadFromCloudExplicit() {
     
     try {
         const cloudData = await loadFromCloud();
+        const cloudTimestamp = await getCloudTimestamp();
         
         if (cloudData && cloudData.length >= 0) {
             // Сохраняем загруженные данные локально
+            // ВАЖНО: сохраняем временную метку из облака, а не текущее время!
             if (window.saveSubscriptions) {
-                window.saveSubscriptions(cloudData);
+                window.saveSubscriptions(cloudData, cloudTimestamp);
             }
             if (window.subscriptions) {
                 window.subscriptions = cloudData;
