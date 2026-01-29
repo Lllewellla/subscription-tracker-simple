@@ -3,9 +3,30 @@ const STORAGE_KEY = 'subscriptions';
 
 function saveSubscriptions(subscriptions) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(subscriptions));
+    localStorage.setItem('subscriptions_timestamp', Date.now().toString());
+    
+    // Синхронизация с облаком, если включена
+    if (window.firebaseSync && window.firebaseSync.isEnabled()) {
+        window.firebaseSync.syncToCloud();
+    }
 }
 
-function loadSubscriptions() {
+// Экспортируем для использования в firebase-sync.js
+window.saveSubscriptions = saveSubscriptions;
+
+async function loadSubscriptions() {
+    // Сначала пытаемся загрузить из облака, если синхронизация включена
+    if (window.firebaseSync && window.firebaseSync.isEnabled()) {
+        const cloudData = await window.firebaseSync.loadFromCloud();
+        if (cloudData && cloudData.length > 0) {
+            // Сохраняем локально для офлайн доступа
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(cloudData));
+            localStorage.setItem('subscriptions_timestamp', Date.now().toString());
+            return cloudData;
+        }
+    }
+    
+    // Загружаем из localStorage
     const stored = localStorage.getItem(STORAGE_KEY);
     if (!stored) return [];
     try {
@@ -14,6 +35,9 @@ function loadSubscriptions() {
         return [];
     }
 }
+
+// Экспортируем для использования в firebase-sync.js
+window.loadSubscriptions = loadSubscriptions;
 
 // Уведомления
 async function requestNotificationPermission() {
@@ -740,18 +764,20 @@ function initTheme() {
 }
 
 // Инициализация
-function init() {
+async function init() {
     try {
         console.log('Инициализация приложения...');
         initTheme();
-        subscriptions = loadSubscriptions();
+        
+        // Загружаем подписки (асинхронно, если есть синхронизация)
+        subscriptions = await loadSubscriptions();
         console.log('Загружено подписок:', subscriptions.length);
         render();
         console.log('Рендеринг завершен');
         requestNotificationPermission();
         checkUpcomingBilling(subscriptions);
-        setInterval(() => {
-            subscriptions = loadSubscriptions();
+        setInterval(async () => {
+            subscriptions = await loadSubscriptions();
             checkUpcomingBilling(subscriptions);
         }, 30 * 60 * 1000);
         

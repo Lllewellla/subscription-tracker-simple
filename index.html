@@ -12,9 +12,16 @@
 </head>
 <body>
     <div class="app">
-        <div class="theme-switcher">
-            <button class="theme-btn active" id="theme-nature" data-theme="nature">🌿 Природа</button>
-            <button class="theme-btn" id="theme-pixel" data-theme="pixel">🎮 Pixel Art</button>
+        <div class="header-controls">
+            <div class="theme-switcher">
+                <button class="theme-btn active" id="theme-nature" data-theme="nature">🌿 Природа</button>
+                <button class="theme-btn" id="theme-pixel" data-theme="pixel">🎮 Pixel Art</button>
+            </div>
+            <div class="sync-controls">
+                <span id="sync-status" class="sync-status" title="Статус синхронизации">⚪ Локально</span>
+                <button id="btn-sync-login" class="btn-sync" style="display: none;">Войти для синхронизации</button>
+                <button id="btn-sync-logout" class="btn-sync" style="display: none;">Выйти</button>
+            </div>
         </div>
 
         <div id="statistics" class="statistics"></div>
@@ -152,12 +159,50 @@
 
     <!-- Подключаем Tesseract.js через CDN -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getAuth } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+        import { getFirestore } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+        
+        // Конфигурация Firebase (замените на свою)
+        // Инструкция по настройке: см. FIREBASE_SETUP.md
+        const firebaseConfig = {
+                apiKey: "AIzaSyA-nOqsByzX_2iMYg8yhNZlXOaC77Y9FQ4",
+                authDomain: "lllewellla-subs-tracker.firebaseapp.com",
+                projectId: "lllewellla-subs-tracker",
+                storageBucket: "lllewellla-subs-tracker.firebasestorage.app",
+                messagingSenderId: "647879132081",
+                appId: "1:647879132081:web:20f8a0eca2b89262813390"
+         };
+
+        
+        // Инициализация Firebase (только если конфигурация настроена)
+        try {
+            if (firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY") {
+                const app = initializeApp(firebaseConfig);
+                const auth = getAuth(app);
+                const db = getFirestore(app);
+                
+                // Экспортируем для использования в других модулях
+                window.firebaseApp = app;
+                window.firebaseAuth = auth;
+                window.firebaseDb = db;
+                console.log('Firebase инициализирован');
+            } else {
+                console.log('Firebase не настроен. Работаем в локальном режиме.');
+            }
+        } catch (error) {
+            console.error('Ошибка инициализации Firebase:', error);
+        }
+    </script>
     <script>
         // Проверка загрузки
         window.addEventListener('error', function(e) {
             console.error('Ошибка:', e.message, e.filename, e.lineno);
         });
     </script>
+    <script src="firebase-sync.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
