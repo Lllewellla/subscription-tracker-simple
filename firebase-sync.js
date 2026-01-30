@@ -477,11 +477,15 @@ async function saveToCloudExplicit() {
         updateSyncStatus('synced', 'Сохранено в облако');
         
         // Показываем уведомление об успехе
-        if (Notification.permission === 'granted') {
-            new Notification('Данные сохранены', {
-                body: 'Ваши подписки успешно сохранены в облако',
-                icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="green"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>'
-            });
+        if ('Notification' in window && Notification.permission === 'granted') {
+            try {
+                new Notification('Данные сохранены', {
+                    body: 'Ваши подписки успешно сохранены в облако',
+                    icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="green"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>'
+                });
+            } catch (error) {
+                console.warn('Не удалось показать уведомление:', error);
+            }
         }
     } catch (error) {
         console.error('Ошибка сохранения:', error);
@@ -538,11 +542,15 @@ async function loadFromCloudExplicit() {
             updateSyncStatus('synced', 'Загружено из облака');
             
             // Показываем уведомление об успехе
-            if (Notification.permission === 'granted') {
-                new Notification('Данные загружены', {
-                    body: `Загружено ${cloudData.length} подписок из облака`,
-                    icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="blue"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>'
-                });
+            if ('Notification' in window && Notification.permission === 'granted') {
+                try {
+                    new Notification('Данные загружены', {
+                        body: `Загружено ${cloudData.length} подписок из облака`,
+                        icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="blue"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>'
+                    });
+                } catch (error) {
+                    console.warn('Не удалось показать уведомление:', error);
+                }
             }
         } else {
             updateSyncStatus('ready', 'В облаке нет данных');

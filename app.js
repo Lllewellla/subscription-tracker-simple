@@ -48,8 +48,12 @@ async function requestNotificationPermission() {
 }
 
 function showNotification(title, body) {
-    if (Notification.permission === 'granted') {
-        new Notification(title, { body });
+    if ('Notification' in window && Notification.permission === 'granted') {
+        try {
+            new Notification(title, { body });
+        } catch (error) {
+            console.warn('Не удалось показать уведомление:', error);
+        }
     }
 }
 
@@ -351,6 +355,20 @@ function getMonthlyPrice(sub) {
     return sub.billingCycle === 'monthly' ? sub.price : sub.price / 12;
 }
 
+// Конвертация суммы в рубли
+// Курсы: 1 EUR = 100 RUB, 1 USD = 0.90 EUR = 90 RUB, 1 RUB = 1 RUB
+function convertToRubles(amount, currency) {
+    switch (currency) {
+        case '€':
+            return amount * 100; // 1 EUR = 100 RUB
+        case '$':
+            return amount * 90; // 1 USD = 0.90 EUR = 90 RUB
+        case '₽':
+        default:
+            return amount; // 1 RUB = 1 RUB
+    }
+}
+
 function renderStatistics() {
     const calculateMonthlyByCurrency = (group) => {
         const filtered = group 
@@ -366,9 +384,21 @@ function renderStatistics() {
     const formatTotals = (totals) => {
         return Object.entries(totals).map(([currency, amount]) => `${amount.toFixed(2)} ${currency}`).join(' + ') || '0 ₽';
     };
+    const calculateTotalInRubles = (group) => {
+        const filtered = group 
+            ? subscriptions.filter(s => s.group === group && !s.excludeFromStats)
+            : subscriptions.filter(s => !s.excludeFromStats);
+        let totalRubles = 0;
+        filtered.forEach(sub => {
+            const monthlyPrice = getMonthlyPrice(sub);
+            totalRubles += convertToRubles(monthlyPrice, sub.currency);
+        });
+        return totalRubles;
+    };
     const allTotals = calculateMonthlyByCurrency();
     const mineTotals = calculateMonthlyByCurrency('mine');
     const othersTotals = calculateMonthlyByCurrency('others');
+    const totalInRubles = calculateTotalInRubles();
     const upcomingCount = subscriptions.filter(sub => {
         const billingDate = new Date(sub.nextBillingDate);
         const today = new Date();
@@ -386,6 +416,10 @@ function renderStatistics() {
             <div class="stat-card primary">
                 <div class="stat-label">Всего в месяц</div>
                 <div class="stat-value stat-value-multi">${formatTotals(allTotals)}</div>
+            </div>
+            <div class="stat-card total-rubles">
+                <div class="stat-label">Общая сумма в рублях</div>
+                <div class="stat-value">${totalInRubles.toFixed(2)} ₽</div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">Мои подписки</div>
@@ -409,9 +443,41 @@ function renderSubscriptions() {
     const filtered = currentFilter === 'all' 
         ? subscriptions 
         : subscriptions.filter(s => s.group === currentFilter);
-    const sorted = [...filtered].sort((a, b) => 
-        new Date(a.nextBillingDate).getTime() - new Date(b.nextBillingDate).getTime()
-    );
+    
+    // Автоматический сброс статуса оплаты для подписок, у которых дата списания уже прошла
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    let needsSave = false;
+    filtered.forEach(sub => {
+        if (sub.isPaid) {
+            const billingDate = new Date(sub.nextBillingDate);
+            billingDate.setHours(0, 0, 0, 0);
+            if (billingDate < today) {
+                sub.isPaid = false;
+                needsSave = true;
+            }
+        }
+    });
+    if (needsSave) {
+        saveSubscriptions(subscriptions);
+    }
+    
+    // Сортировка: сначала по статусу оплаты (неоплаченные сверху), затем по дате
+    const sorted = [...filtered].sort((a, b) => {
+        const aBillingDate = new Date(a.nextBillingDate);
+        const bBillingDate = new Date(b.nextBillingDate);
+        const aIsPaid = a.isPaid && aBillingDate >= today;
+        const bIsPaid = b.isPaid && bBillingDate >= today;
+        
+        // Если одна оплачена, а другая нет - неоплаченная идет выше
+        if (aIsPaid !== bIsPaid) {
+            return aIsPaid ? 1 : -1;
+        }
+        
+        // Если обе оплачены или обе неоплачены - сортируем по дате
+        return aBillingDate.getTime() - bBillingDate.getTime();
+    });
+    
     const container = document.getElementById('subscriptions-container');
     container.className = viewMode === 'list' ? 'subscriptions-list' : 'subscriptions-grid';
     
@@ -421,11 +487,11 @@ function renderSubscriptions() {
     }
     container.innerHTML = sorted.map(sub => {
         const billingDate = new Date(sub.nextBillingDate);
-        const today = new Date();
         const diffTime = billingDate.getTime() - today.getTime();
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         const isUpcoming = diffDays <= 2 && diffDays >= 0;
         const isOverdue = diffDays < 0;
+        const isPaid = sub.isPaid && diffDays >= 0;
         const monthlyPrice = getMonthlyPrice(sub);
         let daysText = '';
         if (diffDays >= 0) {
@@ -437,10 +503,14 @@ function renderSubscriptions() {
             daysText = 'Просрочено!';
         }
         return `
-            <div class="subscription-card ${isUpcoming ? 'upcoming' : ''} ${isOverdue ? 'overdue' : ''}">
+            <div class="subscription-card ${isUpcoming ? 'upcoming' : ''} ${isOverdue ? 'overdue' : ''} ${isPaid ? 'paid' : ''}">
                 <div class="card-header">
                     <h3>${escapeHtml(sub.name)}</h3>
                     <div class="card-actions">
+                        <label class="paid-checkbox-label" title="${isPaid ? 'Отметить как неоплаченную' : 'Отметить как оплаченную'}">
+                            <input type="checkbox" class="paid-checkbox" data-paid-id="${sub.id}" ${isPaid ? 'checked' : ''}>
+                            <span class="paid-checkbox-text">${isPaid ? '✓ Оплачено' : 'Оплатить'}</span>
+                        </label>
                         <button class="icon-btn" data-edit-id="${sub.id}" title="Редактировать">✏️</button>
                         <button class="icon-btn" data-delete-id="${sub.id}" title="Удалить">🗑️</button>
                     </div>
@@ -478,6 +548,18 @@ function renderSubscriptions() {
     container.querySelectorAll('[data-delete-id]').forEach(btn => {
         btn.onclick = () => deleteSubscription(btn.dataset.deleteId);
     });
+    // Добавляем обработчики для чекбоксов оплаты
+    container.querySelectorAll('.paid-checkbox').forEach(checkbox => {
+        checkbox.onchange = () => {
+            const subId = checkbox.dataset.paidId;
+            const sub = subscriptions.find(s => s.id === subId);
+            if (sub) {
+                sub.isPaid = checkbox.checked;
+                saveSubscriptions(subscriptions);
+                render();
+            }
+        };
+    });
 }
 
 function escapeHtml(text) {
@@ -502,11 +584,19 @@ function openForm(sub = null) {
         document.getElementById('billingCycle').value = sub.billingCycle;
         document.getElementById('group').value = sub.group;
         document.getElementById('excludeFromStats').checked = sub.excludeFromStats || false;
+        const isPaidField = document.getElementById('isPaid');
+        if (isPaidField) {
+            isPaidField.checked = sub.isPaid || false;
+        }
         document.getElementById('notes').value = sub.notes || '';
     } else {
         document.getElementById('subscription-form').reset();
         document.getElementById('nextBillingDate').value = new Date().toISOString().split('T')[0];
         document.getElementById('excludeFromStats').checked = false;
+        const isPaidField = document.getElementById('isPaid');
+        if (isPaidField) {
+            isPaidField.checked = false;
+        }
     }
     document.getElementById('form-modal').style.display = 'flex';
 }
@@ -528,9 +618,15 @@ function handleFormSubmit(e) {
             billingCycle: document.getElementById('billingCycle').value,
             group: document.getElementById('group').value,
             excludeFromStats: document.getElementById('excludeFromStats').checked,
+            isPaid: document.getElementById('isPaid') ? document.getElementById('isPaid').checked : false,
             notes: document.getElementById('notes').value.trim()
         };
         if (editingId) {
+            // При редактировании сохраняем существующее значение isPaid, если поле не было в форме
+            const existing = subscriptions.find(s => s.id === editingId);
+            if (existing && !document.getElementById('isPaid')) {
+                sub.isPaid = existing.isPaid || false;
+            }
             subscriptions = subscriptions.map(s => s.id === editingId ? sub : s);
         } else {
             subscriptions.push(sub);
@@ -701,6 +797,7 @@ function applyImport() {
             billingCycle: c.inferredCycle,
             group: existingSame?.group || group,
             excludeFromStats: existingSame?.excludeFromStats || false,
+            isPaid: existingSame?.isPaid || false,
             notes: (existingSame?.notes ? `${existingSame.notes}\n` : '') +
                 `Импортировано из выписки. Последнее списание: ${c.lastPaymentDate}. Уверенность: ${c.confidence}.`
         };
@@ -853,6 +950,7 @@ async function init() {
                     billingCycle: data.cycle,
                     group: existingSame?.group || 'mine',
                     excludeFromStats: existingSame?.excludeFromStats || false,
+                    isPaid: existingSame?.isPaid || false,
                     notes: existingSame?.notes || `Импортировано. Последнее списание: ${data.lastPayment}.`
                 };
                 
