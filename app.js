@@ -444,42 +444,33 @@ function renderSubscriptions() {
         ? subscriptions 
         : subscriptions.filter(s => s.group === currentFilter);
     
-    // Автоматический сброс статуса оплаты для подписок, у которых дата списания уже прошла
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     let needsSave = false;
+    
+    // Подписки, срок которых прошёл: считаем оплаченными, пересчитываем дату на следующий период и карточка уйдёт в конец списка
     filtered.forEach(sub => {
-        if (sub.isPaid) {
-            const billingDate = new Date(sub.nextBillingDate);
+        let billingDate = new Date(sub.nextBillingDate);
+        billingDate.setHours(0, 0, 0, 0);
+        while (billingDate < today) {
+            sub.nextBillingDate = sub.billingCycle === 'yearly'
+                ? addYears(sub.nextBillingDate, 1)
+                : addMonths(sub.nextBillingDate, 1);
+            billingDate = new Date(sub.nextBillingDate);
             billingDate.setHours(0, 0, 0, 0);
-            if (billingDate < today) {
-                sub.isPaid = false;
-                needsSave = true;
-            }
+            needsSave = true;
         }
     });
     if (needsSave) {
         saveSubscriptions(subscriptions);
     }
     
-    // Сортировка: сначала по статусу оплаты (неоплаченные сверху), затем по дате ближайшего списания
+    // Сортировка только по дате ближайшего списания (хронологически)
     const sorted = [...filtered].sort((a, b) => {
-        // Нормализуем даты для корректного сравнения
         const aBillingDate = new Date(a.nextBillingDate);
         aBillingDate.setHours(0, 0, 0, 0);
         const bBillingDate = new Date(b.nextBillingDate);
         bBillingDate.setHours(0, 0, 0, 0);
-        
-        // Определяем, оплачена ли подписка (только если дата списания еще не наступила)
-        const aIsPaid = a.isPaid && aBillingDate >= today;
-        const bIsPaid = b.isPaid && bBillingDate >= today;
-        
-        // Если одна оплачена, а другая нет - неоплаченная идет выше
-        if (aIsPaid !== bIsPaid) {
-            return aIsPaid ? 1 : -1;
-        }
-        
-        // Если обе оплачены или обе неоплачены - сортируем по дате ближайшего списания (хронологически)
         return aBillingDate.getTime() - bBillingDate.getTime();
     });
     
@@ -496,7 +487,6 @@ function renderSubscriptions() {
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         const isUpcoming = diffDays <= 2 && diffDays >= 0;
         const isOverdue = diffDays < 0;
-        const isPaid = sub.isPaid && diffDays >= 0;
         const monthlyPrice = getMonthlyPrice(sub);
         let daysText = '';
         if (diffDays >= 0) {
@@ -508,14 +498,10 @@ function renderSubscriptions() {
             daysText = 'Просрочено!';
         }
         return `
-            <div class="subscription-card ${isUpcoming ? 'upcoming' : ''} ${isOverdue ? 'overdue' : ''} ${isPaid ? 'paid' : ''}">
+            <div class="subscription-card ${isUpcoming ? 'upcoming' : ''} ${isOverdue ? 'overdue' : ''}">
                 <div class="card-header">
                     <h3>${escapeHtml(sub.name)}</h3>
                     <div class="card-actions">
-                        <label class="paid-checkbox-label" title="${isPaid ? 'Отметить как неоплаченную' : 'Отметить как оплаченную'}">
-                            <input type="checkbox" class="paid-checkbox" data-paid-id="${sub.id}" ${isPaid ? 'checked' : ''}>
-                            <span class="paid-checkbox-text">${isPaid ? '✓ Оплачено' : 'Оплатить'}</span>
-                        </label>
                         <button class="icon-btn" data-edit-id="${sub.id}" title="Редактировать">✏️</button>
                         <button class="icon-btn" data-delete-id="${sub.id}" title="Удалить">🗑️</button>
                     </div>
@@ -553,18 +539,6 @@ function renderSubscriptions() {
     container.querySelectorAll('[data-delete-id]').forEach(btn => {
         btn.onclick = () => deleteSubscription(btn.dataset.deleteId);
     });
-    // Добавляем обработчики для чекбоксов оплаты
-    container.querySelectorAll('.paid-checkbox').forEach(checkbox => {
-        checkbox.onchange = () => {
-            const subId = checkbox.dataset.paidId;
-            const sub = subscriptions.find(s => s.id === subId);
-            if (sub) {
-                sub.isPaid = checkbox.checked;
-                saveSubscriptions(subscriptions);
-                render();
-            }
-        };
-    });
 }
 
 function escapeHtml(text) {
@@ -589,19 +563,11 @@ function openForm(sub = null) {
         document.getElementById('billingCycle').value = sub.billingCycle;
         document.getElementById('group').value = sub.group;
         document.getElementById('excludeFromStats').checked = sub.excludeFromStats || false;
-        const isPaidField = document.getElementById('isPaid');
-        if (isPaidField) {
-            isPaidField.checked = sub.isPaid || false;
-        }
         document.getElementById('notes').value = sub.notes || '';
     } else {
         document.getElementById('subscription-form').reset();
         document.getElementById('nextBillingDate').value = new Date().toISOString().split('T')[0];
         document.getElementById('excludeFromStats').checked = false;
-        const isPaidField = document.getElementById('isPaid');
-        if (isPaidField) {
-            isPaidField.checked = false;
-        }
     }
     document.getElementById('form-modal').style.display = 'flex';
 }
@@ -623,15 +589,9 @@ function handleFormSubmit(e) {
             billingCycle: document.getElementById('billingCycle').value,
             group: document.getElementById('group').value,
             excludeFromStats: document.getElementById('excludeFromStats').checked,
-            isPaid: document.getElementById('isPaid') ? document.getElementById('isPaid').checked : false,
             notes: document.getElementById('notes').value.trim()
         };
         if (editingId) {
-            // При редактировании сохраняем существующее значение isPaid, если поле не было в форме
-            const existing = subscriptions.find(s => s.id === editingId);
-            if (existing && !document.getElementById('isPaid')) {
-                sub.isPaid = existing.isPaid || false;
-            }
             subscriptions = subscriptions.map(s => s.id === editingId ? sub : s);
         } else {
             subscriptions.push(sub);
@@ -802,7 +762,6 @@ function applyImport() {
             billingCycle: c.inferredCycle,
             group: existingSame?.group || group,
             excludeFromStats: existingSame?.excludeFromStats || false,
-            isPaid: existingSame?.isPaid || false,
             notes: (existingSame?.notes ? `${existingSame.notes}\n` : '') +
                 `Импортировано из выписки. Последнее списание: ${c.lastPaymentDate}. Уверенность: ${c.confidence}.`
         };
@@ -955,7 +914,6 @@ async function init() {
                     billingCycle: data.cycle,
                     group: existingSame?.group || 'mine',
                     excludeFromStats: existingSame?.excludeFromStats || false,
-                    isPaid: existingSame?.isPaid || false,
                     notes: existingSame?.notes || `Импортировано. Последнее списание: ${data.lastPayment}.`
                 };
                 
