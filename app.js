@@ -413,13 +413,13 @@ function renderStatistics() {
                 <div class="stat-label">Всего подписок</div>
                 <div class="stat-value">${subscriptions.filter(s => !s.excludeFromStats).length}</div>
             </div>
-            <div class="stat-card primary">
-                <div class="stat-label">Всего в месяц</div>
-                <div class="stat-value stat-value-multi">${formatTotals(allTotals)}</div>
-            </div>
             <div class="stat-card total-rubles">
                 <div class="stat-label">Общая сумма в рублях</div>
                 <div class="stat-value">${totalInRubles.toFixed(2)} ₽</div>
+            </div>
+            <div class="stat-card primary">
+                <div class="stat-label">Всего в месяц</div>
+                <div class="stat-value stat-value-multi">${formatTotals(allTotals)}</div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">Мои подписки</div>
