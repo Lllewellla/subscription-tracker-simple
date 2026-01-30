@@ -462,10 +462,15 @@ function renderSubscriptions() {
         saveSubscriptions(subscriptions);
     }
     
-    // Сортировка: сначала по статусу оплаты (неоплаченные сверху), затем по дате
+    // Сортировка: сначала по статусу оплаты (неоплаченные сверху), затем по дате ближайшего списания
     const sorted = [...filtered].sort((a, b) => {
+        // Нормализуем даты для корректного сравнения
         const aBillingDate = new Date(a.nextBillingDate);
+        aBillingDate.setHours(0, 0, 0, 0);
         const bBillingDate = new Date(b.nextBillingDate);
+        bBillingDate.setHours(0, 0, 0, 0);
+        
+        // Определяем, оплачена ли подписка (только если дата списания еще не наступила)
         const aIsPaid = a.isPaid && aBillingDate >= today;
         const bIsPaid = b.isPaid && bBillingDate >= today;
         
@@ -474,7 +479,7 @@ function renderSubscriptions() {
             return aIsPaid ? 1 : -1;
         }
         
-        // Если обе оплачены или обе неоплачены - сортируем по дате
+        // Если обе оплачены или обе неоплачены - сортируем по дате ближайшего списания (хронологически)
         return aBillingDate.getTime() - bBillingDate.getTime();
     });
     
