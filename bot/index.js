@@ -99,7 +99,8 @@ function formatList(subs) {
     const dateStr = formatDateShort(s.nextBillingDate);
     const priceStr = `${s.price} ${s.currency || '₽'}`;
     const emoji = getCategoryEmoji(s.category);
-    return `${i + 1}. ${emoji} <b>${escapeHtml(s.name)}</b> — <b>${escapeHtml(priceStr)}</b> — ${daysText} (${dateStr})`;
+    const num = String(i + 1).padStart(2, '0');
+    return `${num}. ${emoji} <b>${escapeHtml(s.name)}</b> — <b>${escapeHtml(priceStr)}</b> — ${daysText} (${dateStr})`;
   });
   return '📋 <b>Подписки</b> (от ближайшего к дальнему):\n🟧 нужные · 🔲 на-вылет\n\n' + lines.join('\n');
 }
@@ -297,9 +298,10 @@ bot.onText(/\/delete(?:_(\d+))?$/, async (msg, match) => {
   }
   const buttons = subs.slice(0, 15).map((s, i) => {
     const emoji = getCategoryEmoji(s.category);
-    return [{ text: `${i + 1}. ${emoji} ${s.name}`, callback_data: `del_${s.id}` }];
+    const num = String(i + 1).padStart(2, '0');
+    return [{ text: `${num}. ${emoji} ${s.name}`, callback_data: `del_${s.id}` }];
   });
-  await bot.sendMessage(chatId, 'Выберите подписку для удаления (или отправьте /delete_НОМЕР):', {
+  await bot.sendMessage(chatId, 'Выберите подписку для удаления (или отправьте /delete_НОМЕР, например /delete_03):', {
     reply_markup: { inline_keyboard: [...buttons, [{ text: 'Отмена', callback_data: 'del_cancel' }]] }
   });
 });
