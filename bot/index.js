@@ -65,8 +65,21 @@ function formatDate(iso) {
   return new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
+function formatDateShort(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+}
+
 function getCategoryEmoji(category) {
   return category === 'on-the-way-out' ? '🔲' : '🟧';
+}
+
+function escapeHtml(s) {
+  if (!s) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 function formatList(subs) {
@@ -83,12 +96,12 @@ function formatList(subs) {
     else if (diffDays === 1) daysText = 'завтра';
     else if (diffDays > 0) daysText = `через ${diffDays} дн.`;
     else daysText = 'просрочено';
-    const dateStr = formatDate(s.nextBillingDate);
+    const dateStr = formatDateShort(s.nextBillingDate);
     const priceStr = `${s.price} ${s.currency || '₽'}`;
     const emoji = getCategoryEmoji(s.category);
-    return `${i + 1}. ${emoji} **${escapeMarkdown(s.name)}** — **${escapeMarkdown(priceStr)}**  - ${daysText} (${dateStr} г.)`;
+    return `${i + 1}. ${emoji} <b>${escapeHtml(s.name)}</b> — <b>${escapeHtml(priceStr)}</b> — ${daysText} (${dateStr})`;
   });
-  return '📋 **Подписки** (от ближайшего к дальнему):\n🟧 нужные · 🔲 на-вылет\n\n' + lines.join('\n');
+  return '📋 <b>Подписки</b> (от ближайшего к дальнему):\n🟧 нужные · 🔲 на-вылет\n\n' + lines.join('\n');
 }
 
 function escapeMarkdown(s) {
