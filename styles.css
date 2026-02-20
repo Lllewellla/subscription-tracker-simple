@@ -1208,6 +1208,20 @@ body {
     border-bottom-color: #66bb6a;
 }
 
+.telegram-link-code {
+    font-family: monospace;
+    font-size: 1.2em;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin: 12px 0;
+    word-break: break-all;
+}
+.telegram-link-hint {
+    color: #a5d6a7;
+    font-size: 0.9em;
+}
+
 .auth-error {
     background: rgba(244, 67, 54, 0.2);
     border: 1px solid rgba(244, 67, 54, 0.4);

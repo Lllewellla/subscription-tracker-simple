@@ -23,6 +23,22 @@
                 <button id="btn-sync-save" class="btn-sync btn-save-cloud" style="display: none;" title="Сохранить данные в облако">💾 Сохранить в облако</button>
                 <button id="btn-sync-login" class="btn-sync" style="display: none;">Войти для синхронизации</button>
                 <button id="btn-sync-logout" class="btn-sync" style="display: none;">Выйти</button>
+                <button id="btn-telegram-link" class="btn-sync" style="display: none;" title="Привязать Telegram-бота для уведомлений и управления">📱 Привязать Telegram</button>
+            </div>
+        </div>
+
+        <!-- Модальное окно привязки Telegram -->
+        <div id="telegram-link-modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Привязка Telegram</h2>
+                    <button class="modal-close" id="telegram-link-close-btn">✕</button>
+                </div>
+                <div id="telegram-link-body">
+                    <p>Откройте Telegram и отправьте боту команду:</p>
+                    <p class="telegram-link-code" id="telegram-link-code">—</p>
+                    <p class="telegram-link-hint">Код действителен 10 минут.</p>
+                </div>
             </div>
         </div>
 

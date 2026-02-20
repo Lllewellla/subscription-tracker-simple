@@ -30,6 +30,11 @@ service cloud.firestore {
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
+    // Коды привязки Telegram: создавать может только владелец (uid в документе = свой uid)
+    match /link_codes/{code} {
+      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow read, update, delete: if false;
+    }
   }
 }
 ```

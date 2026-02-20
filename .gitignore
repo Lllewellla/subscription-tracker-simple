@@ -15,6 +15,7 @@ Desktop.ini
 .env
 .env.local
 .env.*.local
+bot/service-account.json
 
 # Logs
 *.log

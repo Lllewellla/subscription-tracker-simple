@@ -1,0 +1,19 @@
+{
+  "name": "subscription-tracker-bot",
+  "version": "1.0.0",
+  "description": "Telegram-бот для трекера подписок: уведомления и управление подписками",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "dotenv": "^16.3.1",
+    "firebase-admin": "^12.0.0",
+    "node-cron": "^3.0.3",
+    "node-telegram-bot-api": "^0.66.0"
+  }
+}

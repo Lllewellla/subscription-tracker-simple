@@ -29,6 +29,8 @@ async function initSync() {
             updateSyncStatus('syncing', 'Подключение...');
             document.getElementById('btn-sync-login').style.display = 'none';
             document.getElementById('btn-sync-logout').style.display = 'inline-block';
+            const telegramBtn = document.getElementById('btn-telegram-link');
+            if (telegramBtn) telegramBtn.style.display = 'inline-block';
             
             try {
                 // Сначала настраиваем слушатель (только для получения обновлений)
@@ -99,6 +101,8 @@ async function initSync() {
             updateSyncStatus('local', 'Локально');
             document.getElementById('btn-sync-login').style.display = 'inline-block';
             document.getElementById('btn-sync-logout').style.display = 'none';
+            const telegramBtn = document.getElementById('btn-telegram-link');
+            if (telegramBtn) telegramBtn.style.display = 'none';
             const saveBtn = document.getElementById('btn-sync-save');
             const loadBtn = document.getElementById('btn-sync-load');
             if (saveBtn) {
@@ -130,6 +134,37 @@ function closeAuthModal() {
     document.getElementById('auth-modal').style.display = 'none';
     document.getElementById('auth-error').style.display = 'none';
     document.getElementById('auth-form').reset();
+}
+
+// ——— Привязка Telegram ———
+function closeTelegramLinkModal() {
+    document.getElementById('telegram-link-modal').style.display = 'none';
+    document.getElementById('telegram-link-code').textContent = '—';
+}
+
+async function openTelegramLinkModal() {
+    if (!syncEnabled || !currentUserId) {
+        alert('Войдите в аккаунт для привязки Telegram.');
+        return;
+    }
+    if (!isFirebaseAvailable()) {
+        alert('Firebase не настроен.');
+        return;
+    }
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    try {
+        const { doc, setDoc, Timestamp } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+        const expiresAt = Timestamp.fromMillis(Date.now() + 10 * 60 * 1000);
+        await setDoc(doc(window.firebaseDb, 'link_codes', code), {
+            uid: currentUserId,
+            expiresAt: expiresAt
+        });
+        document.getElementById('telegram-link-code').textContent = '/link_' + code;
+        document.getElementById('telegram-link-modal').style.display = 'flex';
+    } catch (error) {
+        console.error('Ошибка создания кода привязки:', error);
+        alert('Не удалось создать код. Проверьте правила Firestore для коллекции link_codes.');
+    }
 }
 
 // Переключение между вкладками входа/регистрации
@@ -634,6 +669,20 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (loadBtn) {
             loadBtn.addEventListener('click', loadFromCloudExplicit);
+        }
+        const telegramLinkBtn = document.getElementById('btn-telegram-link');
+        if (telegramLinkBtn) {
+            telegramLinkBtn.addEventListener('click', openTelegramLinkModal);
+        }
+        const telegramLinkCloseBtn = document.getElementById('telegram-link-close-btn');
+        if (telegramLinkCloseBtn) {
+            telegramLinkCloseBtn.addEventListener('click', closeTelegramLinkModal);
+        }
+        const telegramLinkModal = document.getElementById('telegram-link-modal');
+        if (telegramLinkModal) {
+            telegramLinkModal.addEventListener('click', (e) => {
+                if (e.target.id === 'telegram-link-modal') closeTelegramLinkModal();
+            });
         }
         
         // Обработчики модального окна аутентификации
