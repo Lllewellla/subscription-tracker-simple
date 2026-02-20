@@ -207,6 +207,14 @@ body {
     box-shadow: 0 4px 12px rgba(46, 125, 50, 0.25);
 }
 
+.category-filters {
+    margin-top: 6px;
+}
+
+.card-category-emoji {
+    margin-right: 4px;
+}
+
 .action-buttons {
     display: flex;
     justify-content: space-between;
@@ -578,6 +586,18 @@ body {
     color: #e0e0e0;
     border: 1px solid rgba(189, 189, 189, 0.5);
     margin-right: 8px;
+}
+
+.badge-needed {
+    background: rgba(255, 167, 38, 0.25);
+    color: #ffe0b2;
+    border: 1px solid rgba(255, 167, 38, 0.5);
+}
+
+.badge-on-the-way-out {
+    background: rgba(158, 158, 158, 0.3);
+    color: #bdbdbd;
+    border: 1px solid rgba(158, 158, 158, 0.5);
 }
 
 /* Модальные окна */

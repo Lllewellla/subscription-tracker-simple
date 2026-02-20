@@ -80,6 +80,11 @@
                 <button class="filter-btn" data-filter="mine">Мои подписки</button>
                 <button class="filter-btn" data-filter="others">Для других</button>
             </div>
+            <div class="filter-buttons category-filters">
+                <button class="filter-btn category-filter-btn active" data-category-filter="all">Все</button>
+                <button class="filter-btn category-filter-btn" data-category-filter="needed">🟧 Нужные</button>
+                <button class="filter-btn category-filter-btn" data-category-filter="on-the-way-out">🔲 На-вылет</button>
+            </div>
             <div class="action-buttons">
                 <div class="view-mode-buttons">
                     <button class="view-mode-btn active" id="view-grid" title="Сетка">
@@ -141,6 +146,13 @@
                     <select id="group">
                         <option value="mine">Мои подписки</option>
                         <option value="others">Для других</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="category">Категория</label>
+                    <select id="category">
+                        <option value="needed">🟧 Нужная</option>
+                        <option value="on-the-way-out">🔲 На-вылет</option>
                     </select>
                 </div>
                 <div class="form-group">

@@ -65,6 +65,10 @@ function formatDate(iso) {
   return new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
+function getCategoryEmoji(category) {
+  return category === 'on-the-way-out' ? '🔲' : '🟧';
+}
+
 function formatList(subs) {
   if (subs.length === 0) return '📭 Подписок пока нет. Добавьте через /add или в веб-приложении.';
   const sorted = sortByNextBilling(subs);
@@ -81,9 +85,10 @@ function formatList(subs) {
     else daysText = 'просрочено';
     const dateStr = formatDate(s.nextBillingDate);
     const priceStr = `${s.price} ${s.currency || '₽'}`;
-    return `${i + 1}. **${escapeMarkdown(s.name)}** — **${escapeMarkdown(priceStr)}**  - ${daysText} (${dateStr} г.)`;
+    const emoji = getCategoryEmoji(s.category);
+    return `${i + 1}. ${emoji} **${escapeMarkdown(s.name)}** — **${escapeMarkdown(priceStr)}**  - ${daysText} (${dateStr} г.)`;
   });
-  return '📋 **Подписки** (от ближайшего к дальнему):\n\n' + lines.join('\n');
+  return '📋 **Подписки** (от ближайшего к дальнему):\n🟧 нужные · 🔲 на-вылет\n\n' + lines.join('\n');
 }
 
 function escapeMarkdown(s) {
@@ -144,7 +149,7 @@ bot.onText(/\/list/, async (msg) => {
     return;
   }
   const subs = await getSubscriptions(uid);
-  await bot.sendMessage(chatId, formatList(subs), { parse_mode: 'Markdown' });
+  await bot.sendMessage(chatId, formatList(subs), { parse_mode: 'HTML' });
 });
 
 // ——— Отмена текущего действия ———
@@ -222,6 +227,13 @@ bot.on('message', async (msg) => {
   if (state.step === 'cycle') {
     const cycle = /year|год/i.test(text) ? 'yearly' : 'monthly';
     state.billingCycle = cycle;
+    state.step = 'category';
+    await bot.sendMessage(chatId, 'Категория: **нужная** (🟧) или **на-вылет** (🔲)? Ответьте: needed или out', { parse_mode: 'Markdown' });
+    return;
+  }
+  if (state.step === 'category') {
+    const category = /out|вылет/i.test(text) ? 'on-the-way-out' : 'needed';
+    state.category = category;
     addState.delete(chatId);
 
     const subs = await getSubscriptions(uid);
@@ -233,12 +245,14 @@ bot.on('message', async (msg) => {
       nextBillingDate: state.nextBillingDate,
       billingCycle: state.billingCycle || 'monthly',
       group: 'mine',
+      category: state.category || 'needed',
       excludeFromStats: false,
       notes: ''
     };
     subs.push(newSub);
     await saveSubscriptions(uid, subs);
-    await bot.sendMessage(chatId, `✅ Подписка **${escapeMarkdown(state.name)}** добавлена.`, { parse_mode: 'Markdown' });
+    const emoji = getCategoryEmoji(category);
+    await bot.sendMessage(chatId, `✅ Подписка ${emoji} **${escapeMarkdown(state.name)}** добавлена.`, { parse_mode: 'Markdown' });
   }
 });
 
@@ -268,7 +282,10 @@ bot.onText(/\/delete(?:_(\d+))?$/, async (msg, match) => {
     await bot.sendMessage(chatId, `🗑 Подписка «${toRemove.name}» удалена.`);
     return;
   }
-  const buttons = subs.slice(0, 15).map((s, i) => [{ text: `${i + 1}. ${s.name}`, callback_data: `del_${s.id}` }]);
+  const buttons = subs.slice(0, 15).map((s, i) => {
+    const emoji = getCategoryEmoji(s.category);
+    return [{ text: `${i + 1}. ${emoji} ${s.name}`, callback_data: `del_${s.id}` }];
+  });
   await bot.sendMessage(chatId, 'Выберите подписку для удаления (или отправьте /delete_НОМЕР):', {
     reply_markup: { inline_keyboard: [...buttons, [{ text: 'Отмена', callback_data: 'del_cancel' }]] }
   });
@@ -315,7 +332,10 @@ cron.schedule(
       if (!chatId) continue;
       const subs = (doc.data().subscriptions || []).filter((s) => s.nextBillingDate === targetDate);
       if (subs.length === 0) continue;
-      const lines = subs.map((s) => `• ${s.name} — ${s.price} ${s.currency || '₽'}`);
+      const lines = subs.map((s) => {
+        const emoji = getCategoryEmoji(s.category);
+        return `• ${emoji} ${s.name} — ${s.price} ${s.currency || '₽'}`;
+      });
       const text = `⏰ Через 2 дня списание:\n\n${lines.join('\n')}`;
       try {
         await bot.sendMessage(chatId, text);

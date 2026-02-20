@@ -344,8 +344,13 @@ function inferNextBillingDate(candidate) {
 // Основное приложение
 let subscriptions = [];
 let currentFilter = 'all';
+let currentCategoryFilter = 'all'; // 'all' | 'needed' | 'on-the-way-out'
 let editingId = null;
 let viewMode = 'grid'; // 'grid' или 'list'
+
+function getCategoryEmoji(category) {
+    return category === 'on-the-way-out' ? '🔲' : '🟧';
+}
 
 function formatDate(date) {
     return new Date(date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -440,9 +445,12 @@ function renderStatistics() {
 }
 
 function renderSubscriptions() {
-    const filtered = currentFilter === 'all' 
+    let filtered = currentFilter === 'all' 
         ? subscriptions 
         : subscriptions.filter(s => s.group === currentFilter);
+    if (currentCategoryFilter !== 'all') {
+        filtered = filtered.filter(s => (s.category || 'needed') === currentCategoryFilter);
+    }
     
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -497,10 +505,12 @@ function renderSubscriptions() {
         } else {
             daysText = 'Просрочено!';
         }
+        const category = sub.category || 'needed';
+        const categoryEmoji = getCategoryEmoji(category);
         return `
             <div class="subscription-card ${isUpcoming ? 'upcoming' : ''} ${isOverdue ? 'overdue' : ''}">
                 <div class="card-header">
-                    <h3>${escapeHtml(sub.name)}</h3>
+                    <h3><span class="card-category-emoji" title="${category === 'on-the-way-out' ? 'На-вылет' : 'Нужная'}">${categoryEmoji}</span> ${escapeHtml(sub.name)}</h3>
                     <div class="card-actions">
                         <button class="icon-btn" data-edit-id="${sub.id}" title="Редактировать">✏️</button>
                         <button class="icon-btn" data-delete-id="${sub.id}" title="Удалить">🗑️</button>
@@ -525,6 +535,9 @@ function renderSubscriptions() {
                 </div>
                 <div class="card-footer">
                     ${sub.excludeFromStats ? '<span class="badge badge-excluded">Не в статистике</span>' : ''}
+                    <span class="badge badge-category ${category === 'on-the-way-out' ? 'badge-on-the-way-out' : 'badge-needed'}">
+                        ${category === 'on-the-way-out' ? '🔲 На-вылет' : '🟧 Нужная'}
+                    </span>
                     <span class="badge ${sub.group === 'mine' ? 'badge-mine' : 'badge-others'}">
                         ${sub.group === 'mine' ? 'Мои подписки' : 'Для других'}
                     </span>
@@ -562,11 +575,13 @@ function openForm(sub = null) {
         document.getElementById('nextBillingDate').value = sub.nextBillingDate;
         document.getElementById('billingCycle').value = sub.billingCycle;
         document.getElementById('group').value = sub.group;
+        document.getElementById('category').value = sub.category || 'needed';
         document.getElementById('excludeFromStats').checked = sub.excludeFromStats || false;
         document.getElementById('notes').value = sub.notes || '';
     } else {
         document.getElementById('subscription-form').reset();
         document.getElementById('nextBillingDate').value = new Date().toISOString().split('T')[0];
+        document.getElementById('category').value = 'needed';
         document.getElementById('excludeFromStats').checked = false;
     }
     document.getElementById('form-modal').style.display = 'flex';
@@ -588,6 +603,7 @@ function handleFormSubmit(e) {
             nextBillingDate: document.getElementById('nextBillingDate').value,
             billingCycle: document.getElementById('billingCycle').value,
             group: document.getElementById('group').value,
+            category: document.getElementById('category').value || 'needed',
             excludeFromStats: document.getElementById('excludeFromStats').checked,
             notes: document.getElementById('notes').value.trim()
         };
@@ -621,8 +637,16 @@ function deleteSubscription(id) {
 
 function setFilter(filter) {
     currentFilter = filter;
-    document.querySelectorAll('.filter-btn').forEach(btn => {
+    document.querySelectorAll('.filter-btn[data-filter]').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.filter === filter);
+    });
+    renderSubscriptions();
+}
+
+function setCategoryFilter(categoryFilter) {
+    currentCategoryFilter = categoryFilter;
+    document.querySelectorAll('.category-filter-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.categoryFilter === categoryFilter);
     });
     renderSubscriptions();
 }
@@ -761,6 +785,7 @@ function applyImport() {
             nextBillingDate,
             billingCycle: c.inferredCycle,
             group: existingSame?.group || group,
+            category: existingSame?.category || 'needed',
             excludeFromStats: existingSame?.excludeFromStats || false,
             notes: (existingSame?.notes ? `${existingSame.notes}\n` : '') +
                 `Импортировано из выписки. Последнее списание: ${c.lastPaymentDate}. Уверенность: ${c.confidence}.`
@@ -849,8 +874,11 @@ async function init() {
         // Переключатели режима отображения
         document.getElementById('view-grid').onclick = () => setViewMode('grid');
         document.getElementById('view-list').onclick = () => setViewMode('list');
-        document.querySelectorAll('.filter-btn').forEach(btn => {
+        document.querySelectorAll('.filter-btn[data-filter]').forEach(btn => {
             btn.onclick = () => setFilter(btn.dataset.filter);
+        });
+        document.querySelectorAll('.category-filter-btn').forEach(btn => {
+            btn.onclick = () => setCategoryFilter(btn.dataset.categoryFilter);
         });
         document.getElementById('file-input').onchange = handleFileSelect;
         document.getElementById('text-input').oninput = handleTextInput;
@@ -913,6 +941,7 @@ async function init() {
                     nextBillingDate: nextBillingDate,
                     billingCycle: data.cycle,
                     group: existingSame?.group || 'mine',
+                    category: existingSame?.category || 'needed',
                     excludeFromStats: existingSame?.excludeFromStats || false,
                     notes: existingSame?.notes || `Импортировано. Последнее списание: ${data.lastPayment}.`
                 };

@@ -234,6 +234,14 @@ body {
     box-shadow: 4px 4px 0px #0a0a1a;
 }
 
+.category-filters {
+    margin-top: 6px;
+}
+
+.card-category-emoji {
+    margin-right: 4px;
+}
+
 .action-buttons {
     display: flex;
     justify-content: space-between;
@@ -619,6 +627,18 @@ body {
     background: #888;
     color: #ffffff;
     margin-right: 8px;
+}
+
+.badge-needed {
+    background: rgba(255, 167, 38, 0.4);
+    color: #0f0f23;
+    border: 2px solid #ff9800;
+}
+
+.badge-on-the-way-out {
+    background: #666;
+    color: #e0e0e0;
+    border: 2px solid #888;
 }
 
 /* Модальные окна */
