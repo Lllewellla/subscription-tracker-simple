@@ -75,12 +75,13 @@ function formatList(subs) {
     d.setHours(0, 0, 0, 0);
     const diffDays = Math.ceil((d - today) / (1000 * 60 * 60 * 24));
     let daysText = '';
-    if (diffDays === 0) daysText = ' (сегодня)';
-    else if (diffDays === 1) daysText = ' (завтра)';
-    else if (diffDays === 2) daysText = ' (через 2 дня)';
-    else if (diffDays > 0) daysText = ` (через ${diffDays} дн.)`;
-    else daysText = ' (просрочено)';
-    return `${i + 1}. **${escapeMarkdown(s.name)}** — ${s.price} ${s.currency || '₽'}, след. списание: ${formatDate(s.nextBillingDate)}${daysText}`;
+    if (diffDays === 0) daysText = 'сегодня';
+    else if (diffDays === 1) daysText = 'завтра';
+    else if (diffDays > 0) daysText = `через ${diffDays} дн.`;
+    else daysText = 'просрочено';
+    const dateStr = formatDate(s.nextBillingDate);
+    const priceStr = `${s.price} ${s.currency || '₽'}`;
+    return `${i + 1}. **${escapeMarkdown(s.name)}** — **${escapeMarkdown(priceStr)}**  - ${daysText} (${dateStr} г.)`;
   });
   return '📋 **Подписки** (от ближайшего к дальнему):\n\n' + lines.join('\n');
 }
