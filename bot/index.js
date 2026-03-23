@@ -1,8 +1,8 @@
 /**
  * Telegram-бот для трекера подписок.
- * - Уведомления за 2 дня до списания
+ * - Уведомления за 2 дня, за 1 день и в день списания
  * - /list — список подписок по дате (от ближайшего к дальнему)
- * - /add, /delete — добавление и удаление подписок
+ * - /add, /delete, /category — добавление, удаление и смена категории
  * - /link_КОД — привязка к аккаунту (код из веб-приложения)
  */
 
@@ -70,6 +70,12 @@ function formatDateShort(iso) {
   return new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
 }
 
+function getReminderLabel(daysLeft) {
+  if (daysLeft === 2) return 'Через 2 дня списание';
+  if (daysLeft === 1) return 'Завтра списание';
+  return 'Сегодня списание';
+}
+
 function getCategoryEmoji(category) {
   return category === 'on-the-way-out' ? '🔲' : '🟧';
 }
@@ -84,25 +90,33 @@ function escapeHtml(s) {
 
 function formatList(subs) {
   if (subs.length === 0) return '📭 Подписок пока нет. Добавьте через /add или в веб-приложении.';
-  const sorted = sortByNextBilling(subs);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const upcoming = [];
+  const past = [];
+  for (const sub of subs) {
+    const d = new Date(sub.nextBillingDate);
+    d.setHours(0, 0, 0, 0);
+    if (d >= today) upcoming.push(sub);
+    else past.push(sub);
+  }
+  const sorted = [...sortByNextBilling(upcoming), ...sortByNextBilling(past)];
   const lines = sorted.map((s, i) => {
     const d = new Date(s.nextBillingDate);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
     d.setHours(0, 0, 0, 0);
     const diffDays = Math.ceil((d - today) / (1000 * 60 * 60 * 24));
     let daysText = '';
     if (diffDays === 0) daysText = 'сегодня';
     else if (diffDays === 1) daysText = 'завтра';
     else if (diffDays > 0) daysText = `через ${diffDays} дн.`;
-    else daysText = 'просрочено';
+    else daysText = 'дата прошла';
     const dateStr = formatDateShort(s.nextBillingDate);
     const priceStr = `${s.price} ${s.currency || '₽'}`;
     const emoji = getCategoryEmoji(s.category);
     const num = String(i + 1).padStart(2, '0');
     return `${num}. ${emoji} <b>${escapeHtml(s.name)}</b> — <b>${escapeHtml(priceStr)}</b> — ${daysText} (${dateStr})`;
   });
-  return '📋 <b>Подписки</b> (от ближайшего к дальнему):\n🟧 нужные · 🔲 на-вылет\n\n' + lines.join('\n');
+  return '📋 <b>Подписки</b> (сначала ближайшие, затем прошедшие):\n🟧 нужные · 🔲 на-вылет\n\n' + lines.join('\n');
 }
 
 function escapeMarkdown(s) {
@@ -123,7 +137,7 @@ bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id;
   const uid = await getUidByChatId(chatId);
   if (uid) {
-    await bot.sendMessage(chatId, '👋 Вы уже привязаны к аккаунту.\n\nКоманды:\n/list — список подписок\n/add — добавить подписку\n/delete — удалить подписку\n/delete_НОМЕР — удалить по номеру из списка', { parse_mode: 'Markdown' });
+    await bot.sendMessage(chatId, '👋 Вы уже привязаны к аккаунту.\n\nКоманды:\n/list — список подписок\n/add — добавить подписку\n/delete — удалить подписку\n/category — сменить категорию\n/delete_НОМЕР — удалить по номеру из списка\n/category_НОМЕР — сменить категорию по номеру', { parse_mode: 'Markdown' });
   } else {
     await bot.sendMessage(
       chatId,
@@ -151,7 +165,7 @@ bot.onText(/\/link_(\d+)/, async (msg, match) => {
   }
   await db.collection('users').doc(uid).set({ telegramChatId: Number(chatId) }, { merge: true });
   await db.collection('link_codes').doc(code).delete();
-  await bot.sendMessage(chatId, '✅ Аккаунт привязан! Теперь вы можете использовать /list, /add, /delete и получать напоминания за 2 дня до списания.');
+  await bot.sendMessage(chatId, '✅ Аккаунт привязан! Теперь вы можете использовать /list, /add, /delete и получать напоминания за 2 дня, за 1 день и в день списания.');
 });
 
 // ——— Команда /list ———
@@ -306,30 +320,95 @@ bot.onText(/\/delete(?:_(\d+))?$/, async (msg, match) => {
   });
 });
 
+// ——— Команда /category и /category_НОМЕР ———
+bot.onText(/\/category(?:_(\d+))?$/, async (msg, match) => {
+  const chatId = msg.chat.id;
+  const numArg = match[1];
+  const uid = await getUidByChatId(chatId);
+  if (!uid) {
+    await bot.sendMessage(chatId, 'Сначала привяжите аккаунт: /link_КОД');
+    return;
+  }
+  const subs = sortByNextBilling(await getSubscriptions(uid));
+  if (subs.length === 0) {
+    await bot.sendMessage(chatId, 'Нет подписок для смены категории.');
+    return;
+  }
+  if (numArg) {
+    const idx = parseInt(numArg, 10);
+    if (idx < 1 || idx > subs.length) {
+      await bot.sendMessage(chatId, `Укажите номер от 1 до ${subs.length}.`);
+      return;
+    }
+    const target = subs[idx - 1];
+    const allSubs = await getSubscriptions(uid);
+    const updated = allSubs.map((s) => {
+      if (s.id !== target.id) return s;
+      return { ...s, category: s.category === 'on-the-way-out' ? 'needed' : 'on-the-way-out' };
+    });
+    await saveSubscriptions(uid, updated);
+    const newEmoji = target.category === 'on-the-way-out' ? '🟧' : '🔲';
+    await bot.sendMessage(chatId, `✅ Категория «${target.name}» изменена: теперь ${newEmoji}.`);
+    return;
+  }
+
+  const buttons = subs.slice(0, 15).map((s, i) => {
+    const emoji = getCategoryEmoji(s.category);
+    const num = String(i + 1).padStart(2, '0');
+    return [{ text: `${num}. ${emoji} ${s.name}`, callback_data: `cat_${s.id}` }];
+  });
+  await bot.sendMessage(chatId, 'Выберите подписку для смены категории (или отправьте /category_НОМЕР, например /category_03):', {
+    reply_markup: { inline_keyboard: [...buttons, [{ text: 'Отмена', callback_data: 'cat_cancel' }]] }
+  });
+});
+
 bot.on('callback_query', async (query) => {
   const chatId = query.message.chat.id;
   const data = query.data;
-  if (!data.startsWith('del_')) return;
   await bot.answerCallbackQuery(query.id);
-  if (data === 'del_cancel') {
-    await bot.editMessageText('Отменено.', { chat_id: chatId, message_id: query.message.message_id });
+  if (data.startsWith('del_')) {
+    if (data === 'del_cancel') {
+      await bot.editMessageText('Отменено.', { chat_id: chatId, message_id: query.message.message_id });
+      return;
+    }
+    const subId = data.replace('del_', '');
+    const uid = await getUidByChatId(chatId);
+    if (!uid) return;
+    const subs = await getSubscriptions(uid);
+    const sub = subs.find((s) => s.id === subId);
+    if (!sub) {
+      await bot.editMessageText('Подписка уже удалена или не найдена.', { chat_id: chatId, message_id: query.message.message_id });
+      return;
+    }
+    const newSubs = subs.filter((s) => s.id !== subId);
+    await saveSubscriptions(uid, newSubs);
+    await bot.editMessageText(`🗑 Подписка «${sub.name}» удалена.`, { chat_id: chatId, message_id: query.message.message_id });
     return;
   }
-  const subId = data.replace('del_', '');
-  const uid = await getUidByChatId(chatId);
-  if (!uid) return;
-  const subs = await getSubscriptions(uid);
-  const sub = subs.find((s) => s.id === subId);
-  if (!sub) {
-    await bot.editMessageText('Подписка уже удалена или не найдена.', { chat_id: chatId, message_id: query.message.message_id });
-    return;
+
+  if (data.startsWith('cat_')) {
+    if (data === 'cat_cancel') {
+      await bot.editMessageText('Отменено.', { chat_id: chatId, message_id: query.message.message_id });
+      return;
+    }
+    const subId = data.replace('cat_', '');
+    const uid = await getUidByChatId(chatId);
+    if (!uid) return;
+    const subs = await getSubscriptions(uid);
+    const sub = subs.find((s) => s.id === subId);
+    if (!sub) {
+      await bot.editMessageText('Подписка не найдена.', { chat_id: chatId, message_id: query.message.message_id });
+      return;
+    }
+    const newCategory = sub.category === 'on-the-way-out' ? 'needed' : 'on-the-way-out';
+    const updated = subs.map((s) => (s.id === subId ? { ...s, category: newCategory } : s));
+    await saveSubscriptions(uid, updated);
+    const emoji = getCategoryEmoji(newCategory);
+    await bot.editMessageText(`✅ Категория «${sub.name}» обновлена: теперь ${emoji}.`, { chat_id: chatId, message_id: query.message.message_id });
   }
-  const newSubs = subs.filter((s) => s.id !== subId);
-  await saveSubscriptions(uid, newSubs);
-  await bot.editMessageText(`🗑 Подписка «${sub.name}» удалена.`, { chat_id: chatId, message_id: query.message.message_id });
 });
 
-// ——— Ежедневная проверка: уведомления за 2 дня до списания ———
+// ——— Ежедневная проверка: уведомления по датам списания ———
 function getDateInDays(days) {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -337,27 +416,43 @@ function getDateInDays(days) {
   return d.toISOString().slice(0, 10);
 }
 
+async function sendRemindersForOffset(daysLeft) {
+  const targetDate = getDateInDays(daysLeft);
+  const header = getReminderLabel(daysLeft);
+  const usersSnap = await db.collection('users').get();
+
+  for (const doc of usersSnap.docs) {
+    const chatId = doc.data().telegramChatId;
+    if (!chatId) continue;
+
+    const dueSubs = (doc.data().subscriptions || []).filter((s) => s.nextBillingDate === targetDate);
+    if (dueSubs.length === 0) continue;
+
+    const regularSubs = dueSubs.filter((s) => s.category !== 'on-the-way-out');
+    const outSubs = dueSubs.filter((s) => s.category === 'on-the-way-out');
+
+    const regularLines = regularSubs.map((s) => `• 🟧 ${s.name} — ${s.price} ${s.currency || '₽'}`);
+    const outLines = outSubs.map((s) => `• 🔲 ${s.name} — ${s.price} ${s.currency || '₽'}`);
+
+    try {
+      if (regularLines.length > 0) {
+        await bot.sendMessage(chatId, `⏰ ${header}:\n\n${regularLines.join('\n')}`);
+      }
+      if (outLines.length > 0) {
+        await bot.sendMessage(chatId, `⚠️ Подписка на вылет (${header.toLowerCase()}):\n\n${outLines.join('\n')}`);
+      }
+    } catch (e) {
+      console.warn('Не удалось отправить уведомление в', chatId, e.message);
+    }
+  }
+}
+
 cron.schedule(
   '0 9 * * *',
   async () => {
-    const targetDate = getDateInDays(2);
-    const usersSnap = await db.collection('users').get();
-    for (const doc of usersSnap.docs) {
-      const chatId = doc.data().telegramChatId;
-      if (!chatId) continue;
-      const subs = (doc.data().subscriptions || []).filter((s) => s.nextBillingDate === targetDate);
-      if (subs.length === 0) continue;
-      const lines = subs.map((s) => {
-        const emoji = getCategoryEmoji(s.category);
-        return `• ${emoji} ${s.name} — ${s.price} ${s.currency || '₽'}`;
-      });
-      const text = `⏰ Через 2 дня списание:\n\n${lines.join('\n')}`;
-      try {
-        await bot.sendMessage(chatId, text);
-      } catch (e) {
-        console.warn('Не удалось отправить уведомление в', chatId, e.message);
-      }
-    }
+    await sendRemindersForOffset(2);
+    await sendRemindersForOffset(1);
+    await sendRemindersForOffset(0);
   },
   { timezone: TZ }
 );
