@@ -52,6 +52,81 @@ async function getSubscriptions(uid) {
   return Array.isArray(subs) ? subs : [];
 }
 
+/** Как в веб-приложении (app.js): сдвиг даты по календарю YYYY-MM-DD. */
+function addMonths(iso, months) {
+  const [year, month, day] = iso.split('-').map(Number);
+  let newYear = year;
+  let newMonth = month + months;
+  while (newMonth > 12) {
+    newMonth -= 12;
+    newYear += 1;
+  }
+  while (newMonth < 1) {
+    newMonth += 12;
+    newYear -= 1;
+  }
+  const lastDayOfMonth = new Date(newYear, newMonth, 0).getDate();
+  const resultDay = Math.min(day, lastDayOfMonth);
+  const resultMonthStr = String(newMonth).padStart(2, '0');
+  const resultDayStr = String(resultDay).padStart(2, '0');
+  return `${newYear}-${resultMonthStr}-${resultDayStr}`;
+}
+
+function addYears(iso, years) {
+  return addMonths(iso, years * 12);
+}
+
+/** Локальная календарная дата YYYY-MM-DD (без UTC-сдвига от toISOString). */
+function toLocalYMD(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * Если дата списания уже прошла — переносим на следующий период (как на сайте при отрисовке списка).
+ */
+function rollSubscriptionToNextBilling(sub) {
+  const iso = sub.nextBillingDate;
+  if (!iso || typeof iso !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return sub;
+  const cycle = sub.billingCycle === 'yearly' ? 'yearly' : 'monthly';
+  let next = iso;
+  let billingDate = new Date(next);
+  if (Number.isNaN(billingDate.getTime())) return sub;
+  billingDate.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  let guard = 0;
+  while (billingDate < today && guard < 500) {
+    next = cycle === 'yearly' ? addYears(next, 1) : addMonths(next, 1);
+    billingDate = new Date(next);
+    billingDate.setHours(0, 0, 0, 0);
+    guard += 1;
+  }
+  if (next === sub.nextBillingDate) return sub;
+  return { ...sub, nextBillingDate: next };
+}
+
+function normalizeSubscriptionsRollForward(subs) {
+  if (!Array.isArray(subs)) return { subs: [], changed: false };
+  let changed = false;
+  const rolled = subs.map((sub) => {
+    const r = rollSubscriptionToNextBilling(sub);
+    if (r.nextBillingDate !== sub.nextBillingDate) changed = true;
+    return r;
+  });
+  return { subs: rolled, changed };
+}
+
+/** Загрузка подписок с автопереносом прошедших дат и сохранением в Firestore при изменении. */
+async function getSubscriptionsWithRollForward(uid) {
+  const subs = await getSubscriptions(uid);
+  const { subs: rolled, changed } = normalizeSubscriptionsRollForward(subs);
+  if (changed) await saveSubscriptions(uid, rolled);
+  return rolled;
+}
+
 function sortByNextBilling(subs) {
   return [...subs].sort((a, b) => {
     const da = new Date(a.nextBillingDate || 0).getTime();
@@ -92,15 +167,7 @@ function formatList(subs) {
   if (subs.length === 0) return '📭 Подписок пока нет. Добавьте через /add или в веб-приложении.';
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const upcoming = [];
-  const past = [];
-  for (const sub of subs) {
-    const d = new Date(sub.nextBillingDate);
-    d.setHours(0, 0, 0, 0);
-    if (d >= today) upcoming.push(sub);
-    else past.push(sub);
-  }
-  const sorted = [...sortByNextBilling(upcoming), ...sortByNextBilling(past)];
+  const sorted = sortByNextBilling(subs);
   const lines = sorted.map((s, i) => {
     const d = new Date(s.nextBillingDate);
     d.setHours(0, 0, 0, 0);
@@ -109,14 +176,14 @@ function formatList(subs) {
     if (diffDays === 0) daysText = 'сегодня';
     else if (diffDays === 1) daysText = 'завтра';
     else if (diffDays > 0) daysText = `через ${diffDays} дн.`;
-    else daysText = 'дата прошла';
+    else daysText = 'скоро';
     const dateStr = formatDateShort(s.nextBillingDate);
     const priceStr = `${s.price} ${s.currency || '₽'}`;
     const emoji = getCategoryEmoji(s.category);
     const num = String(i + 1).padStart(2, '0');
     return `${num}. ${emoji} <b>${escapeHtml(s.name)}</b> — <b>${escapeHtml(priceStr)}</b> — ${daysText} (${dateStr})`;
   });
-  return '📋 <b>Подписки</b> (сначала ближайшие, затем прошедшие):\n🟧 нужные · 🔲 на-вылет\n\n' + lines.join('\n');
+  return '📋 <b>Подписки</b> (от ближайшего к дальнему):\n🟧 нужные · 🔲 на-вылет\n\n' + lines.join('\n');
 }
 
 function escapeMarkdown(s) {
@@ -176,7 +243,7 @@ bot.onText(/\/list/, async (msg) => {
     await bot.sendMessage(chatId, 'Сначала привяжите аккаунт: /link_КОД (код берёте в веб-приложении).');
     return;
   }
-  const subs = await getSubscriptions(uid);
+  const subs = await getSubscriptionsWithRollForward(uid);
   await bot.sendMessage(chatId, formatList(subs), { parse_mode: 'HTML' });
 });
 
@@ -264,7 +331,7 @@ bot.on('message', async (msg) => {
     state.category = category;
     addState.delete(chatId);
 
-    const subs = await getSubscriptions(uid);
+    const subs = await getSubscriptionsWithRollForward(uid);
     const newSub = {
       id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
       name: state.name,
@@ -293,7 +360,7 @@ bot.onText(/\/delete(?:_(\d+))?$/, async (msg, match) => {
     await bot.sendMessage(chatId, 'Сначала привяжите аккаунт: /link_КОД');
     return;
   }
-  const subs = sortByNextBilling(await getSubscriptions(uid));
+  const subs = sortByNextBilling(await getSubscriptionsWithRollForward(uid));
   if (subs.length === 0) {
     await bot.sendMessage(chatId, 'Нет подписок для удаления.');
     return;
@@ -305,7 +372,7 @@ bot.onText(/\/delete(?:_(\d+))?$/, async (msg, match) => {
       return;
     }
     const toRemove = subs[idx - 1];
-    const newSubs = (await getSubscriptions(uid)).filter((s) => s.id !== toRemove.id);
+    const newSubs = (await getSubscriptionsWithRollForward(uid)).filter((s) => s.id !== toRemove.id);
     await saveSubscriptions(uid, newSubs);
     await bot.sendMessage(chatId, `🗑 Подписка «${toRemove.name}» удалена.`);
     return;
@@ -329,7 +396,7 @@ bot.onText(/\/category(?:_(\d+))?$/, async (msg, match) => {
     await bot.sendMessage(chatId, 'Сначала привяжите аккаунт: /link_КОД');
     return;
   }
-  const subs = sortByNextBilling(await getSubscriptions(uid));
+  const subs = sortByNextBilling(await getSubscriptionsWithRollForward(uid));
   if (subs.length === 0) {
     await bot.sendMessage(chatId, 'Нет подписок для смены категории.');
     return;
@@ -341,7 +408,7 @@ bot.onText(/\/category(?:_(\d+))?$/, async (msg, match) => {
       return;
     }
     const target = subs[idx - 1];
-    const allSubs = await getSubscriptions(uid);
+    const allSubs = await getSubscriptionsWithRollForward(uid);
     const updated = allSubs.map((s) => {
       if (s.id !== target.id) return s;
       return { ...s, category: s.category === 'on-the-way-out' ? 'needed' : 'on-the-way-out' };
@@ -374,7 +441,7 @@ bot.on('callback_query', async (query) => {
     const subId = data.replace('del_', '');
     const uid = await getUidByChatId(chatId);
     if (!uid) return;
-    const subs = await getSubscriptions(uid);
+    const subs = await getSubscriptionsWithRollForward(uid);
     const sub = subs.find((s) => s.id === subId);
     if (!sub) {
       await bot.editMessageText('Подписка уже удалена или не найдена.', { chat_id: chatId, message_id: query.message.message_id });
@@ -394,7 +461,7 @@ bot.on('callback_query', async (query) => {
     const subId = data.replace('cat_', '');
     const uid = await getUidByChatId(chatId);
     if (!uid) return;
-    const subs = await getSubscriptions(uid);
+    const subs = await getSubscriptionsWithRollForward(uid);
     const sub = subs.find((s) => s.id === subId);
     if (!sub) {
       await bot.editMessageText('Подписка не найдена.', { chat_id: chatId, message_id: query.message.message_id });
@@ -413,7 +480,7 @@ function getDateInDays(days) {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
   d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+  return toLocalYMD(d);
 }
 
 async function sendRemindersForOffset(daysLeft) {
@@ -425,7 +492,12 @@ async function sendRemindersForOffset(daysLeft) {
     const chatId = doc.data().telegramChatId;
     if (!chatId) continue;
 
-    const dueSubs = (doc.data().subscriptions || []).filter((s) => s.nextBillingDate === targetDate);
+    const uid = doc.id;
+    const rawSubs = doc.data().subscriptions || [];
+    const { subs: rolled, changed } = normalizeSubscriptionsRollForward(Array.isArray(rawSubs) ? rawSubs : []);
+    if (changed) await saveSubscriptions(uid, rolled);
+
+    const dueSubs = rolled.filter((s) => s.nextBillingDate === targetDate);
     if (dueSubs.length === 0) continue;
 
     const regularSubs = dueSubs.filter((s) => s.category !== 'on-the-way-out');
